@@ -1,4 +1,5 @@
 from typing import Literal
+from functools import partial
 
 from langgraph.graph import StateGraph, END
 from src.state import AgentState
@@ -11,21 +12,21 @@ from src.nodes.check import check_result
 from src.nodes.fix import fix_sql
 from src.nodes.answer import generate_answer
 
-def create_graph() -> StateGraph:
+def create_graph(llm) -> StateGraph:
     """
     Creates the LangGraph agent.
     """
     graph = StateGraph(AgentState)
 
-    # Add nodes
-    graph.add_node("Understand_Query", understand_query)
-    graph.add_node("Plan_Query", plan_query)
-    graph.add_node("Generate_SQL", generate_sql)
-    graph.add_node("Validate_SQL", validate_sql)
+    # Add nodes with bound LLM
+    graph.add_node("Understand_Query", partial(understand_query, llm=llm))
+    graph.add_node("Plan_Query", partial(plan_query, llm=llm))
+    graph.add_node("Generate_SQL", partial(generate_sql, llm=llm))
+    graph.add_node("Validate_SQL", partial(validate_sql, llm=llm))
     graph.add_node("Execute_SQL", execute_sql_node)
     graph.add_node("Check_Result", check_result)
-    graph.add_node("Fix_SQL", fix_sql)
-    graph.add_node("Generate_Answer", generate_answer)
+    graph.add_node("Fix_SQL", partial(fix_sql, llm=llm))
+    graph.add_node("Generate_Answer", partial(generate_answer, llm=llm))
 
     # Set entry point
     graph.set_entry_point("Understand_Query")

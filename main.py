@@ -1,6 +1,15 @@
 import duckdb
 import argparse
+import os, getpass
+from dotenv import load_dotenv
+from langchain_openai import ChatOpenAI
 from src.graph import create_graph
+
+load_dotenv()
+
+def _set_env(var: str):
+    if not os.environ.get(var):
+        os.environ[var] = getpass.getpass(f"{var}: ")
 
 def setup_database():
     """
@@ -19,6 +28,9 @@ def main():
     """
     Main function to run the chatbot agent.
     """
+    # Setup environment
+    _set_env("OPENAI_API_KEY")
+
     # Setup database
     setup_database()
 
@@ -27,8 +39,11 @@ def main():
     parser.add_argument("query", type=str, help="The user query")
     args = parser.parse_args()
 
-    # Create graph
-    app = create_graph()
+    # Instantiate LLM globally for the project
+    llm = ChatOpenAI(model="gpt-4o", temperature=0)
+
+    # Create graph with the shared LLM
+    app = create_graph(llm)
 
     # Invoke graph
     final_state = app.invoke(

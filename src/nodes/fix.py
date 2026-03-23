@@ -1,30 +1,16 @@
 import json
 from langchain_core.prompts import ChatPromptTemplate
-from langchain_openai import ChatOpenAI
-from dotenv import load_dotenv
-import os, getpass
-
 from src.state import AgentState
 
-load_dotenv()
-
-def _set_env(var: str):
-    if not os.environ.get(var):
-        os.environ[var] = getpass.getpass(f"{var}: ")
-
-_set_env("OPENAI_API_KEY")
-
-def fix_sql(state: AgentState) -> AgentState:
+def fix_sql(state: AgentState, llm) -> AgentState:
     """
-    Fixes the SQL query based on the error message.
+    Fixes the SQL query using the shared LLM.
     """
     generated_sql = state["generated_sql"]
     sql_error = state["sql_error"]
     query_plan = state["query_plan"]
     retry_count = state["retry_count"]
     
-    llm = ChatOpenAI(temperature=0, model="gpt-4o")
-
     prompt = ChatPromptTemplate.from_messages(
         [
             (

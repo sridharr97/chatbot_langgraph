@@ -1,27 +1,19 @@
 import json
 from langchain_core.prompts import ChatPromptTemplate
-from langchain_openai import ChatOpenAI
-from dotenv import load_dotenv
-import os, getpass
-
 from src.state import AgentState
 
-load_dotenv()
-
-def _set_env(var: str):
-    if not os.environ.get(var):
-        os.environ[var] = getpass.getpass(f"{var}: ")
-
-_set_env("OPENAI_API_KEY")
-
-def generate_sql(state: AgentState) -> AgentState:
+def generate_sql(state: AgentState, llm) -> AgentState:
     """
-    Generates a SQL query from a structured JSON query plan.
+    Generates a SQL query using the shared LLM.
     """
     query_plan = state["query_plan"]
     
-    llm = ChatOpenAI(temperature=0, model="gpt-4o")
-
+    # If there's an error in the plan, skip SQL generation
+    if query_plan.get("error"):
+        print("\n--- NODE: Generate_SQL ---")
+        print(f"Skipping SQL generation due to plan error: {query_plan['error']}")
+        return {**state, "generated_sql": None}
+    
     prompt = ChatPromptTemplate.from_messages(
         [
             (

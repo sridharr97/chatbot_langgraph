@@ -1,27 +1,13 @@
 import json
 from langchain_core.prompts import ChatPromptTemplate
-from langchain_openai import ChatOpenAI
-from dotenv import load_dotenv
-import os, getpass
-
 from src.state import AgentState
 
-load_dotenv()
-
-def _set_env(var: str):
-    if not os.environ.get(var):
-        os.environ[var] = getpass.getpass(f"{var}: ")
-
-_set_env("OPENAI_API_KEY")
-
-def understand_query(state: AgentState) -> AgentState:
+def understand_query(state: AgentState, llm) -> AgentState:
     """
-    Extracts structured intent from the user query.
+    Extracts structured intent from the user query using the shared LLM.
     """
     user_query = state["user_query"]
     
-    llm = ChatOpenAI(temperature=0, model="gpt-4o")
-
     prompt = ChatPromptTemplate.from_messages(
         [
             (

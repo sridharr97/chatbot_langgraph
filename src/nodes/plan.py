@@ -1,18 +1,6 @@
 import json
 from langchain_core.prompts import ChatPromptTemplate
-from langchain_openai import ChatOpenAI
-from dotenv import load_dotenv
-import os, getpass
-
 from src.state import AgentState
-
-load_dotenv()
-
-def _set_env(var: str):
-    if not os.environ.get(var):
-        os.environ[var] = getpass.getpass(f"{var}: ")
-
-_set_env("OPENAI_API_KEY")
 
 # Enhanced schema with descriptions
 SCHEMA = """
@@ -25,15 +13,12 @@ Columns:
 - salary (INTEGER): The annual salary of the employee in USD.
 """
 
-def plan_query(state: AgentState) -> AgentState:
+def plan_query(state: AgentState, llm) -> AgentState:
     """
-    Maps intent to the database schema and generates a structured plan.
-    If the intent cannot be mapped to the schema, returns an error.
+    Maps intent to the database schema using the shared LLM.
     """
     intent = state["intent"]
     
-    llm = ChatOpenAI(temperature=0, model="gpt-4o")
-
     prompt = ChatPromptTemplate.from_messages(
         [
             (

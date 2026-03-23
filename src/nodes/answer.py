@@ -1,22 +1,9 @@
-import json
 from langchain_core.prompts import ChatPromptTemplate
-from langchain_openai import ChatOpenAI
-from dotenv import load_dotenv
-import os, getpass
-
 from src.state import AgentState
 
-load_dotenv()
-
-def _set_env(var: str):
-    if not os.environ.get(var):
-        os.environ[var] = getpass.getpass(f"{var}: ")
-
-_set_env("OPENAI_API_KEY")
-
-def generate_answer(state: AgentState) -> AgentState:
+def generate_answer(state: AgentState, llm) -> AgentState:
     """
-    Generates a natural language answer from the query result or error.
+    Generates a natural language answer using the shared LLM.
     """
     query_result = state.get("query_result")
     user_query = state["user_query"]
@@ -27,7 +14,6 @@ def generate_answer(state: AgentState) -> AgentState:
     # Check if we landed here because of a plan error
     if query_plan.get("error"):
         print(f"Generating answer for plan error: {query_plan['error']}")
-        llm = ChatOpenAI(temperature=0, model="gpt-4o")
         prompt = ChatPromptTemplate.from_messages(
             [
                 (
@@ -51,13 +37,7 @@ def generate_answer(state: AgentState) -> AgentState:
         print(f"Final Answer: {ans}")
         return {**state, "final_answer": ans}
 
-    # Initialize the model
-    llm = ChatOpenAI(
-        temperature=0,
-        model="gpt-4o",
-    )
-
-    # Create the prompt
+    # Create the prompt for successful data conversion
     prompt = ChatPromptTemplate.from_messages(
         [
             (
