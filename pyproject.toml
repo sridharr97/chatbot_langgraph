@@ -1,0 +1,18 @@
+[project]
+name = "chatbot-using-langgraph"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+requires-python = ">=3.13"
+dependencies = [
+    "langchain",
+    "langgraph",
+    "duckdb",
+    "pydantic",
+    "python-dotenv",
+    "langchain-openai",
+    "ipython",
+    "duckdb-engine",
+    "numpy",
+    "pandas",
+]

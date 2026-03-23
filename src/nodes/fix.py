@@ -1,0 +1,62 @@
+import json
+from langchain_core.prompts import ChatPromptTemplate
+from langchain_openai import ChatOpenAI
+from dotenv import load_dotenv
+import os, getpass
+
+from src.state import AgentState
+
+load_dotenv()
+
+def _set_env(var: str):
+    if not os.environ.get(var):
+        os.environ[var] = getpass.getpass(f"{var}: ")
+
+_set_env("OPENAI_API_KEY")
+
+def fix_sql(state: AgentState) -> AgentState:
+    """
+    Fixes the SQL query based on the error message.
+    """
+    generated_sql = state["generated_sql"]
+    sql_error = state["sql_error"]
+    query_plan = state["query_plan"]
+    retry_count = state["retry_count"]
+    
+    llm = ChatOpenAI(temperature=0, model="gpt-4o")
+
+    prompt = ChatPromptTemplate.from_messages(
+        [
+            (
+                "system",
+                "You are an expert at fixing SQL queries. You only return SQL code, and nothing else.",
+            ),
+            (
+                "human", 
+                "Original query plan: {query_plan}\n\n"
+                "Broken SQL: {sql}\n\n"
+                "Error: {error}\n\n"
+                "Please fix the SQL query."
+            ),
+        ]
+    )
+
+    chain = prompt | llm
+    fixed_sql = chain.invoke({
+        "query_plan": json.dumps(query_plan), 
+        "sql": generated_sql, 
+        "error": sql_error
+    })
+
+    # Clean output
+    sql = fixed_sql.content.strip()
+    if sql.startswith("```sql"):
+        sql = sql.replace("```sql", "").replace("```", "").strip()
+
+    print("\n--- NODE: Fix_SQL ---")
+    print(f"Broken SQL: {generated_sql}")
+    print(f"Error: {sql_error}")
+    print(f"Retry Count: {retry_count}")
+    print(f"Fixed SQL: {sql}")
+
+    return {**state, "generated_sql": sql, "retry_count": retry_count + 1}

@@ -1,0 +1,23 @@
+# Python-generated files
+__pycache__/
+*.py[oc]
+build/
+dist/
+wheels/
+*.egg-info
+
+# Virtual environments
+.venv
+
+# Jupyter Notebook checkpoints
+.ipynb_checkpoints
+
+# Jupyter Notebooks
+*.ipynb
+
+# Database and reference files to ignore
+*.db
+*.csv
+*.docx
+*.xlsx
+*.pdf
