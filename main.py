@@ -1,10 +1,14 @@
 import argparse
+import logging
 from src.graph import create_graph
 
 import os, getpass
 from dotenv import load_dotenv
 load_dotenv()
 ENV = os.getenv("ENV", "azure")
+
+# Configure logging to show process updates in CLI
+logging.basicConfig(level=logging.INFO, format='%(message)s')
 
 def get_llm(ENV: str):
     if ENV == "local":
