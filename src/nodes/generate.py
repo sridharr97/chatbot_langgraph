@@ -1,6 +1,10 @@
 import json
+import logging
 from langchain_core.prompts import ChatPromptTemplate
 from src.state import AgentState
+
+# Initialize logger
+logger = logging.getLogger(__name__)
 
 def generate_sql(state: AgentState, llm) -> AgentState:
     """
@@ -10,8 +14,8 @@ def generate_sql(state: AgentState, llm) -> AgentState:
     
     # If there's an error in the plan, skip SQL generation
     if query_plan.get("error"):
-        print("\n--- NODE: Generate_SQL ---")
-        print(f"Skipping SQL generation due to plan error: {query_plan['error']}")
+        logger.info("\n--- NODE: Generate_SQL ---")
+        logger.info(f"Skipping SQL generation due to plan error: {query_plan['error']}")
         return {**state, "generated_sql": None}
     
     prompt = ChatPromptTemplate.from_messages(
@@ -33,7 +37,7 @@ def generate_sql(state: AgentState, llm) -> AgentState:
     if sql.startswith("```sql"):
         sql = sql.replace("```sql", "").replace("```", "").strip()
 
-    print("\n--- NODE: Generate_SQL ---")
-    print(f"Generated SQL: {sql}")
+    logger.info("\n--- NODE: Generate_SQL ---")
+    logger.info(f"Generated SQL: {sql}")
 
     return {**state, "generated_sql": sql}

@@ -1,5 +1,9 @@
+import logging
 from langchain_core.prompts import ChatPromptTemplate
 from src.state import AgentState
+
+# Initialize logger
+logger = logging.getLogger(__name__)
 
 def validate_sql(state: AgentState, llm) -> AgentState:
     """
@@ -23,9 +27,9 @@ def validate_sql(state: AgentState, llm) -> AgentState:
     chain = prompt | llm
     validation_result = chain.invoke({"sql_query": generated_sql})
 
-    print("\n--- NODE: Validate_SQL ---")
-    print(f"SQL to Validate: {generated_sql}")
-    print(f"SQL Validation Result: {validation_result.content}")
+    logger.info("\n--- NODE: Validate_SQL ---")
+    logger.info(f"SQL to Validate: {generated_sql}")
+    logger.info(f"SQL Validation Result: {validation_result.content}")
 
     if "valid" in validation_result.content.lower():
         return {**state, "sql_error": None}

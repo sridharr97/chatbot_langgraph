@@ -1,6 +1,10 @@
 import json
+import logging
 from langchain_core.prompts import ChatPromptTemplate
 from src.state import AgentState
+
+# Initialize logger
+logger = logging.getLogger(__name__)
 
 def understand_query(state: AgentState, llm) -> AgentState:
     """
@@ -34,8 +38,8 @@ def understand_query(state: AgentState, llm) -> AgentState:
     
     intent = json.loads(content)
 
-    print("\n--- NODE: Understand_Query ---")
-    print(f"User Query: {user_query}")
-    print(f"Structured Intent: {json.dumps(intent, indent=2)}")
+    logger.info("\n--- NODE: Understand_Query ---")
+    logger.info(f"User Query: {user_query}")
+    logger.info(f"Structured Intent: {json.dumps(intent, indent=2)}")
 
     return {**state, "intent": intent}

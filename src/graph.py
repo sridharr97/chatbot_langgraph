@@ -1,3 +1,4 @@
+import logging
 from typing import Literal
 from functools import partial
 
@@ -11,6 +12,9 @@ from src.nodes.execute import execute_sql_node
 from src.nodes.check import check_result
 from src.nodes.fix import fix_sql
 from src.nodes.answer import generate_answer
+
+# Initialize logger
+logger = logging.getLogger(__name__)
 
 def create_graph(llm) -> StateGraph:
     """
@@ -39,12 +43,12 @@ def create_graph(llm) -> StateGraph:
         """
         Determines the next node based on whether the plan was successful.
         """
-        print("\n--- EDGE: Plan_Query_Condition ---")
+        logger.info("\n--- EDGE: Plan_Query_Condition ---")
         if state["query_plan"].get("error"):
-            print(f"Decision: Plan error detected: {state['query_plan']['error']}. Routing to Generate_Answer.")
+            logger.info(f"Decision: Plan error detected: {state['query_plan']['error']}. Routing to Generate_Answer.")
             return "Generate_Answer"
         else:
-            print("Decision: Plan is valid. Proceeding to Generate_SQL.")
+            logger.info("Decision: Plan is valid. Proceeding to Generate_SQL.")
             return "Generate_SQL"
 
     graph.add_conditional_edges(
@@ -58,36 +62,36 @@ def create_graph(llm) -> StateGraph:
         """
         Determines the next node based on the state after validating SQL.
         """
-        print("\n--- EDGE: Validate_SQL_Condition ---")
+        logger.info("\n--- EDGE: Validate_SQL_Condition ---")
         if state["sql_error"] is None:
-            print("Decision: SQL is valid. Proceeding to Execute_SQL.")
+            logger.info("Decision: SQL is valid. Proceeding to Execute_SQL.")
             return "Execute_SQL"
         else:
-            print(f"Decision: SQL is invalid. Error: {state['sql_error']}. Proceeding to Fix_SQL.")
+            logger.info(f"Decision: SQL is invalid. Error: {state['sql_error']}. Proceeding to Fix_SQL.")
             return "Fix_SQL"
 
     def check_result_condition(state) -> Literal["Generate_Answer", "Fix_SQL"]:
         """
         Determines the next node based on the state after checking the SQL Executed result.
         """
-        print("\n--- EDGE: Check_Result_Condition ---")
+        logger.info("\n--- EDGE: Check_Result_Condition ---")
         if state["sql_error"] is None:
-            print("Decision: Result is valid. Proceeding to Generate_Answer.")
+            logger.info("Decision: Result is valid. Proceeding to Generate_Answer.")
             return "Generate_Answer"
         else:
-            print(f"Decision: Result is invalid. Error: {state['sql_error']}. Proceeding to Fix_SQL.")
+            logger.info(f"Decision: Result is invalid. Error: {state['sql_error']}. Proceeding to Fix_SQL.")
             return "Fix_SQL"
 
     def fix_sql_condition(state) -> Literal["Validate_SQL", "Generate_Answer"]:
         """
         Determines the next node based on the state after fixing SQL.
         """
-        print("\n--- EDGE: Fix_SQL_Condition ---")
+        logger.info("\n--- EDGE: Fix_SQL_Condition ---")
         if state["retry_count"] <= 3:
-            print(f"Decision: Retry count ({state['retry_count']}) <= 3. Proceeding to Validate_SQL.")
+            logger.info(f"Decision: Retry count ({state['retry_count']}) <= 3. Proceeding to Validate_SQL.")
             return "Validate_SQL"
         else:
-            print(f"Decision: Retry count ({state['retry_count']}) > 3. Proceeding to Generate_Answer.")
+            logger.info(f"Decision: Retry count ({state['retry_count']}) > 3. Proceeding to Generate_Answer.")
             return "Generate_Answer"
 
     graph.add_conditional_edges(

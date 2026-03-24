@@ -1,6 +1,10 @@
 import json
+import logging
 from langchain_core.prompts import ChatPromptTemplate
 from src.state import AgentState
+
+# Initialize logger
+logger = logging.getLogger(__name__)
 
 def fix_sql(state: AgentState, llm) -> AgentState:
     """
@@ -39,10 +43,10 @@ def fix_sql(state: AgentState, llm) -> AgentState:
     if sql.startswith("```sql"):
         sql = sql.replace("```sql", "").replace("```", "").strip()
 
-    print("\n--- NODE: Fix_SQL ---")
-    print(f"Broken SQL: {generated_sql}")
-    print(f"Error: {sql_error}")
-    print(f"Retry Count: {retry_count}")
-    print(f"Fixed SQL: {sql}")
+    logger.info("\n--- NODE: Fix_SQL ---")
+    logger.info(f"Broken SQL: {generated_sql}")
+    logger.info(f"Error: {sql_error}")
+    logger.info(f"Retry Count: {retry_count}")
+    logger.info(f"Fixed SQL: {sql}")
 
     return {**state, "generated_sql": sql, "retry_count": retry_count + 1}

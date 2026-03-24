@@ -1,21 +1,20 @@
 import json
+import os
+import logging
 from langchain_core.prompts import ChatPromptTemplate
 from src.state import AgentState
 
-# Enhanced schema with descriptions
-SCHEMA = """
-Table: employees
-Description: Contains information about company employees, including their personal details, department, and salary.
-Columns:
-- id (INTEGER): Unique identifier for each employee.
-- name (VARCHAR): The full name of the employee.
-- department (VARCHAR): The department the employee works in (e.g., Engineering, Marketing, Sales).
-- salary (INTEGER): The annual salary of the employee in USD.
-"""
+# Initialize logger
+logger = logging.getLogger(__name__)
+
+# Load schema from JSON file
+SCHEMA_PATH = os.path.join(os.path.dirname(__file__), "..", "resources", "schema.json")
+with open(SCHEMA_PATH, "r") as f:
+    SCHEMA = json.load(f)
 
 def plan_query(state: AgentState, llm) -> AgentState:
     """
-    Maps intent to the database schema using the shared LLM.
+    Maps intent to the database schema using the shared LLM and a structured JSON schema.
     """
     intent = state["intent"]
     
@@ -43,7 +42,7 @@ def plan_query(state: AgentState, llm) -> AgentState:
     )
 
     chain = prompt | llm
-    response = chain.invoke({"intent": json.dumps(intent), "schema": SCHEMA})
+    response = chain.invoke({"intent": json.dumps(intent), "schema": json.dumps(SCHEMA, indent=2)})
     
     # Clean output for safety
     content = response.content.strip()
@@ -52,10 +51,10 @@ def plan_query(state: AgentState, llm) -> AgentState:
     
     query_plan = json.loads(content)
 
-    print("\n--- NODE: Plan_Query ---")
+    logger.info("\n--- NODE: Plan_Query ---")
     if query_plan.get("error"):
-        print(f"Plan Error: {query_plan['error']}")
+        logger.info(f"Plan Error: {query_plan['error']}")
     else:
-        print(f"Structured Query Plan: {json.dumps(query_plan, indent=2)}")
+        logger.info(f"Structured Query Plan: {json.dumps(query_plan, indent=2)}")
 
     return {**state, "query_plan": query_plan}

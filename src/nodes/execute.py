@@ -1,5 +1,9 @@
+import logging
 from src.state import AgentState
 from src.tools.duckdb_tool import execute_sql
+
+# Initialize logger
+logger = logging.getLogger(__name__)
 
 def execute_sql_node(state: AgentState) -> AgentState:
     """
@@ -7,14 +11,14 @@ def execute_sql_node(state: AgentState) -> AgentState:
     """
     generated_sql = state["generated_sql"]
     
-    print("\n--- NODE: Execute_SQL ---")
-    print(f"Executing SQL: {generated_sql}")
+    logger.info("\n--- NODE: Execute_SQL ---")
+    logger.info(f"Executing SQL: {generated_sql}")
     
     query_result = execute_sql(generated_sql)
 
     if isinstance(query_result, list) and query_result and "error" in query_result[0]:
-        print(f"SQL Execution Error: {query_result[0]['error']}")
+        logger.info(f"SQL Execution Error: {query_result[0]['error']}")
         return {**state, "sql_error": query_result[0]["error"], "query_result": None}
     else:
-        print(f"SQL Execution Result: {query_result}")
+        logger.info(f"SQL Execution Result: {query_result}")
         return {**state, "query_result": query_result, "sql_error": None}

@@ -1,5 +1,9 @@
+import logging
 from langchain_core.prompts import ChatPromptTemplate
 from src.state import AgentState
+
+# Initialize logger
+logger = logging.getLogger(__name__)
 
 def generate_answer(state: AgentState, llm) -> AgentState:
     """
@@ -9,11 +13,11 @@ def generate_answer(state: AgentState, llm) -> AgentState:
     user_query = state["user_query"]
     query_plan = state.get("query_plan", {})
     
-    print("\n--- NODE: Generate_Answer ---")
+    logger.info("\n--- NODE: Generate_Answer ---")
     
     # Check if we landed here because of a plan error
     if query_plan.get("error"):
-        print(f"Generating answer for plan error: {query_plan['error']}")
+        logger.info(f"Generating answer for plan error: {query_plan['error']}")
         prompt = ChatPromptTemplate.from_messages(
             [
                 (
@@ -27,14 +31,14 @@ def generate_answer(state: AgentState, llm) -> AgentState:
         )
         chain = prompt | llm
         final_answer = chain.invoke({"user_query": user_query, "error": query_plan["error"]})
-        print(f"Final Answer: {final_answer.content}")
+        logger.info(f"Final Answer: {final_answer.content}")
         return {**state, "final_answer": final_answer.content}
 
-    print(f"Data for Answer: {query_result}")
+    logger.info(f"Data for Answer: {query_result}")
 
     if state["retry_count"] > 3 and not query_result:
         ans = "Unable to retrieve correct data after multiple attempts"
-        print(f"Final Answer: {ans}")
+        logger.info(f"Final Answer: {ans}")
         return {**state, "final_answer": ans}
 
     # Create the prompt for successful data conversion
@@ -54,6 +58,6 @@ def generate_answer(state: AgentState, llm) -> AgentState:
     # Get the final answer
     final_answer = chain.invoke({"user_query": user_query, "data": query_result})
     
-    print(f"Final Answer: {final_answer.content}")
+    logger.info(f"Final Answer: {final_answer.content}")
 
     return {**state, "final_answer": final_answer.content}

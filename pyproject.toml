@@ -15,4 +15,7 @@ dependencies = [
     "duckdb-engine",
     "numpy",
     "pandas",
+    "fastapi",
+    "uvicorn",
+    "python-multipart",
 ]
