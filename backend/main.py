@@ -5,6 +5,7 @@ import asyncio
 import json
 import csv
 import contextvars
+from datetime import datetime, date
 from typing import Dict, Any, Optional
 from concurrent.futures import ThreadPoolExecutor
 
@@ -32,6 +33,15 @@ log_queue_ctx = contextvars.ContextVar("log_queue", default=None)
 
 # Global loop reference for the handler
 _loop = None
+
+def custom_json_serializer(obj):
+    """Custom JSON serializer for objects not serializable by default json code"""
+    if isinstance(obj, (datetime, date)):
+        return obj.isoformat()
+    # Handle pandas/duckdb Timestamps if they have an isoformat or __str__
+    if hasattr(obj, 'isoformat'):
+        return obj.isoformat()
+    return str(obj)
 
 class AsyncQueueHandler(logging.Handler):
     def emit(self, record):
@@ -135,7 +145,7 @@ async def process_graph_stream(request: ChatRequest):
             
             if queue_get_task in done:
                 log_msg = queue_get_task.result()
-                yield json.dumps({"type": "log", "content": log_msg}) + "\n"
+                yield json.dumps({"type": "log", "content": log_msg}, default=custom_json_serializer) + "\n"
             else:
                 queue_get_task.cancel()
             
@@ -145,7 +155,7 @@ async def process_graph_stream(request: ChatRequest):
         # Flush any remaining logs
         while not queue.empty():
             log_msg = await queue.get()
-            yield json.dumps({"type": "log", "content": log_msg}) + "\n"
+            yield json.dumps({"type": "log", "content": log_msg}, default=custom_json_serializer) + "\n"
             
         # Get result
         try:
@@ -159,15 +169,15 @@ async def process_graph_stream(request: ChatRequest):
                  
                  # Prepare preview (first 100)
                  preview_data = query_result[:100]
-                 yield json.dumps({"type": "data", "content": preview_data}) + "\n"
+                 yield json.dumps({"type": "data", "content": preview_data}, default=custom_json_serializer) + "\n"
             else:
                  # Clear file if no result
                  save_result_to_csv([])
 
             final_answer = final_state.get("final_answer", "No answer generated.")
-            yield json.dumps({"type": "result", "content": final_answer}) + "\n"
+            yield json.dumps({"type": "result", "content": final_answer}, default=custom_json_serializer) + "\n"
         except Exception as e:
-            yield json.dumps({"type": "error", "content": f"Graph execution failed: {str(e)}"}) + "\n"
+            yield json.dumps({"type": "error", "content": f"Graph execution failed: {str(e)}"}, default=custom_json_serializer) + "\n"
 
     finally:
         log_queue_ctx.reset(token)
