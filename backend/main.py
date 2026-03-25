@@ -3,13 +3,14 @@ import getpass
 import logging
 import asyncio
 import json
+import csv
 import contextvars
 from typing import Dict, Any, Optional
 from concurrent.futures import ThreadPoolExecutor
 
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import StreamingResponse
+from fastapi.responses import StreamingResponse, FileResponse
 from pydantic import BaseModel
 from dotenv import load_dotenv
 
@@ -20,6 +21,11 @@ from src.graph import create_graph
 load_dotenv()
 
 ENV = os.getenv("ENV", "local")
+
+# Define temp dir and file
+TEMP_DIR = os.path.join(os.path.dirname(__file__), "temp")
+os.makedirs(TEMP_DIR, exist_ok=True)
+LATEST_RESULT_FILE = os.path.join(TEMP_DIR, "latest_query_result.csv")
 
 # Context variable to hold the queue for the current request
 log_queue_ctx = contextvars.ContextVar("log_queue", default=None)
@@ -86,6 +92,20 @@ async def startup_event():
 class ChatRequest(BaseModel):
     message: str
 
+def save_result_to_csv(data: list):
+    """Saves the query result to a CSV file."""
+    if not data:
+        # Create empty file
+        with open(LATEST_RESULT_FILE, "w", newline="") as f:
+            pass
+        return
+
+    keys = data[0].keys()
+    with open(LATEST_RESULT_FILE, "w", newline="") as f:
+        dict_writer = csv.DictWriter(f, fieldnames=keys)
+        dict_writer.writeheader()
+        dict_writer.writerows(data)
+
 async def process_graph_stream(request: ChatRequest):
     """
     Generator that yields log events and the final result.
@@ -130,6 +150,20 @@ async def process_graph_stream(request: ChatRequest):
         # Get result
         try:
             final_state = await future
+            
+            # Handle CSV saving and preview
+            query_result = final_state.get("query_result")
+            if query_result and isinstance(query_result, list):
+                 # Save full result to CSV
+                 save_result_to_csv(query_result)
+                 
+                 # Prepare preview (first 100)
+                 preview_data = query_result[:100]
+                 yield json.dumps({"type": "data", "content": preview_data}) + "\n"
+            else:
+                 # Clear file if no result
+                 save_result_to_csv([])
+
             final_answer = final_state.get("final_answer", "No answer generated.")
             yield json.dumps({"type": "result", "content": final_answer}) + "\n"
         except Exception as e:
@@ -145,9 +179,11 @@ async def chat_endpoint(request: ChatRequest):
         media_type="application/x-ndjson"
     )
 
-@app.get("/health")
-async def health_check():
-    return {"status": "healthy"}
+@app.get("/download")
+async def download_endpoint():
+    if os.path.exists(LATEST_RESULT_FILE):
+        return FileResponse(LATEST_RESULT_FILE, media_type='text/csv', filename="query_result.csv")
+    raise HTTPException(status_code=404, detail="No result file found")
 
 if __name__ == "__main__":
     import uvicorn

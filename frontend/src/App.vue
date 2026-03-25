@@ -6,6 +6,7 @@ const messages = ref([
     role: 'assistant', 
     content: 'Hello! I am your database assistant. How can I help you today?',
     logs: [],
+    outputData: [],
     isComplete: true
   }
 ])
@@ -39,6 +40,7 @@ const handleSendMessage = async () => {
     id: assistantMessageId,
     role: 'assistant', 
     logs: [], 
+    outputData: [],
     content: '', 
     isComplete: false,
     activeTab: 'processing',
@@ -79,6 +81,8 @@ const handleSendMessage = async () => {
             const msg = messages.value[msgIndex]
             if (data.type === 'log') {
               msg.logs.push(data.content)
+            } else if (data.type === 'data') {
+              msg.outputData = data.content
             } else if (data.type === 'result') {
               msg.content = data.content
               msg.isComplete = true
@@ -151,6 +155,14 @@ const handleSendMessage = async () => {
                   >
                     Output
                   </button>
+                  <button 
+                    @click="msg.activeTab = 'data'" 
+                    :class="{ active: msg.activeTab === 'data' }"
+                    class="tab-btn"
+                    v-if="msg.outputData && msg.outputData.length > 0"
+                  >
+                    Output Data
+                  </button>
                 </div>
                 
                 <div class="tab-content">
@@ -168,13 +180,39 @@ const handleSendMessage = async () => {
                   </div>
                   
                   <!-- Final Output Tab -->
-                  <div v-else class="output-container">
+                  <div v-else-if="msg.activeTab === 'output'" class="output-container">
                     <p v-if="msg.content" class="content-text">{{ msg.content }}</p>
                     <div v-else class="processing-placeholder">
                       <div class="bounce-dots">
                         <span>.</span><span>.</span><span>.</span>
                       </div>
                       <span>Processing final answer...</span>
+                    </div>
+                  </div>
+
+                  <!-- Output Data Tab -->
+                  <div v-else-if="msg.activeTab === 'data'" class="data-container">
+                    <div class="data-actions" v-if="index === messages.length - 1">
+                        <a href="/api/download" download="query_result.csv" class="download-btn">
+                            Download CSV
+                        </a>
+                    </div>
+                    <div class="table-wrapper" v-if="msg.outputData && msg.outputData.length > 0">
+                        <table>
+                            <thead>
+                                <tr>
+                                    <th v-for="(value, key) in msg.outputData[0]" :key="key">{{ key }}</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <tr v-for="(row, i) in msg.outputData" :key="i">
+                                    <td v-for="(value, key) in row" :key="key">{{ value }}</td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                    <div v-else class="no-data">
+                        No data available.
                     </div>
                   </div>
                 </div>
@@ -471,5 +509,60 @@ body { margin: 0; }
 @keyframes bounce {
   0%, 80%, 100% { transform: scale(0); }
   40% { transform: scale(1.0); }
+}
+
+/* Data Table Styles */
+.data-container {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.data-actions {
+  display: flex;
+  justify-content: flex-end;
+}
+
+.download-btn {
+  background-color: #10b981;
+  color: white;
+  padding: 0.5rem 1rem;
+  border-radius: 0.375rem;
+  text-decoration: none;
+  font-size: 0.875rem;
+  font-weight: 500;
+  transition: background-color 0.2s;
+}
+.download-btn:hover {
+  background-color: #059669;
+}
+
+.table-wrapper {
+  overflow-x: auto;
+  border: 1px solid #e5e7eb;
+  border-radius: 0.375rem;
+}
+
+table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.875rem;
+  text-align: left;
+}
+
+th, td {
+  padding: 0.75rem 1rem;
+  border-bottom: 1px solid #e5e7eb;
+}
+
+th {
+  background-color: #f9fafb;
+  font-weight: 600;
+  color: #374151;
+  white-space: nowrap;
+}
+
+tr:last-child td {
+  border-bottom: none;
 }
 </style>
