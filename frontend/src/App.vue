@@ -88,13 +88,14 @@ const handleSendMessage = async () => {
               msg.isComplete = true
               // Auto-switch tab
               if (!msg.hasAutoSwitched) {
-                msg.activeTab = 'output'
+                const isLargeResult = msg.content.includes("more than 100 records");
+                msg.activeTab = isLargeResult ? 'data' : 'answer';
                 msg.hasAutoSwitched = true
               }
             } else if (data.type === 'error') {
               msg.content = `Error: ${data.content}`
               msg.isComplete = true
-              msg.activeTab = 'output'
+              msg.activeTab = 'answer'
             }
           }
         } catch (e) {
@@ -108,7 +109,7 @@ const handleSendMessage = async () => {
     if (msgIndex !== -1) {
       messages.value[msgIndex].content = 'Sorry, I encountered an error connecting to the server.'
       messages.value[msgIndex].isComplete = true
-      messages.value[msgIndex].activeTab = 'output'
+      messages.value[msgIndex].activeTab = 'answer'
     }
   } finally {
     isLoading.value = false
@@ -149,11 +150,11 @@ const handleSendMessage = async () => {
                     Query Processing
                   </button>
                   <button 
-                    @click="msg.activeTab = 'output'" 
-                    :class="{ active: msg.activeTab === 'output' }"
+                    @click="msg.activeTab = 'answer'" 
+                    :class="{ active: msg.activeTab === 'answer' }"
                     class="tab-btn"
                   >
-                    Output
+                    Answer
                   </button>
                   <button 
                     @click="msg.activeTab = 'data'" 
@@ -179,8 +180,8 @@ const handleSendMessage = async () => {
                     </div>
                   </div>
                   
-                  <!-- Final Output Tab -->
-                  <div v-else-if="msg.activeTab === 'output'" class="output-container">
+                  <!-- Final Answer Tab -->
+                  <div v-else-if="msg.activeTab === 'answer'" class="output-container">
                     <p v-if="msg.content" class="content-text">{{ msg.content }}</p>
                     <div v-else class="processing-placeholder">
                       <div class="bounce-dots">
@@ -539,6 +540,8 @@ body { margin: 0; }
 
 .table-wrapper {
   overflow-x: auto;
+  overflow-y: auto;
+  max-height: 400px;
   border: 1px solid #e5e7eb;
   border-radius: 0.375rem;
 }
@@ -560,6 +563,9 @@ th {
   font-weight: 600;
   color: #374151;
   white-space: nowrap;
+  position: sticky;
+  top: 0;
+  z-index: 10;
 }
 
 tr:last-child td {

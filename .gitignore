@@ -27,3 +27,4 @@ certs/
 *.docx
 *.xlsx
 *.pdf
+src/resources/
