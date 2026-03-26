@@ -15,8 +15,13 @@ from fastapi.responses import StreamingResponse, FileResponse
 from pydantic import BaseModel
 from dotenv import load_dotenv
 
-# Import graph after logging setup might be safer, but let's just use the name
+# Import graph and logging config
 from src.graph import create_graph
+from src.logging_config import setup_logging
+
+# Initialize logging as per requirement
+setup_logging()
+logger = logging.getLogger(__name__)
 
 # Load environment variables
 load_dotenv()
@@ -28,10 +33,7 @@ TEMP_DIR = os.path.join(os.path.dirname(__file__), "temp")
 os.makedirs(TEMP_DIR, exist_ok=True)
 LATEST_RESULT_FILE = os.path.join(TEMP_DIR, "latest_query_result.csv")
 
-# Context variable to hold the queue for the current request
-log_queue_ctx = contextvars.ContextVar("log_queue", default=None)
-
-# Global loop reference for the handler
+# Global loop reference
 _loop = None
 
 def custom_json_serializer(obj):
@@ -42,21 +44,6 @@ def custom_json_serializer(obj):
     if hasattr(obj, 'isoformat'):
         return obj.isoformat()
     return str(obj)
-
-class AsyncQueueHandler(logging.Handler):
-    def emit(self, record):
-        queue = log_queue_ctx.get()
-        if queue and _loop:
-            msg = self.format(record)
-            try:
-                _loop.call_soon_threadsafe(queue.put_nowait, msg)
-            except Exception:
-                pass
-
-# Setup global logging for the src package
-graph_logger = logging.getLogger("src")
-graph_logger.setLevel(logging.INFO)
-graph_logger.propagate = False # Don't log to console again
 
 # Initialize LLM and LangGraph
 def get_llm(ENV: str):
@@ -93,11 +80,6 @@ app.add_middleware(
 async def startup_event():
     global _loop
     _loop = asyncio.get_running_loop()
-    # Attach the global handler once
-    handler = AsyncQueueHandler()
-    formatter = logging.Formatter('%(message)s')
-    handler.setFormatter(formatter)
-    graph_logger.addHandler(handler)
 
 class ChatRequest(BaseModel):
     message: str
@@ -118,55 +100,27 @@ def save_result_to_csv(data: list):
 
 async def process_graph_stream(request: ChatRequest):
     """
-    Generator that yields log events and the final result.
+    Generator that yields the final result and the data preview.
+    Runtime logs are no longer streamed.
     """
-    queue = asyncio.Queue()
-    # Set the context variable for THIS request/coroutine
-    token = log_queue_ctx.set(queue)
-    
-    # Capture the current context to propagate it to the thread
-    ctx = contextvars.copy_context()
-    
     try:
-        # Run graph.invoke in a thread, ensuring context is propagated
-        # We use ctx.run to execute the function within the captured context
+        # Run graph.invoke in a thread
         def run_with_context():
-            return ctx.run(graph_app.invoke, {"user_query": request.message, "retry_count": 0})
+            return graph_app.invoke({"user_query": request.message, "retry_count": 0})
 
         future = asyncio.get_running_loop().run_in_executor(None, run_with_context)
         
-        while not future.done():
-            # Wait for either a new log message or the future to complete
-            queue_get_task = asyncio.create_task(queue.get())
-            done, pending = await asyncio.wait(
-                [queue_get_task, future], 
-                return_when=asyncio.FIRST_COMPLETED
-            )
-            
-            if queue_get_task in done:
-                log_msg = queue_get_task.result()
-                yield json.dumps({"type": "log", "content": log_msg}, default=custom_json_serializer) + "\n"
-            else:
-                queue_get_task.cancel()
-            
-            if future in done:
-                break
-        
-        # Flush any remaining logs
-        while not queue.empty():
-            log_msg = await queue.get()
-            yield json.dumps({"type": "log", "content": log_msg}, default=custom_json_serializer) + "\n"
+        # Wait for future to complete
+        final_state = await future
             
         # Get result
         try:
-            final_state = await future
-
             # Handle CSV saving and preview
             query_result = final_state.get("query_result")
             if query_result and isinstance(query_result, list):
                  # Save full result to CSV
                  save_result_to_csv(query_result)
-
+                 
                  # Prepare preview (first 100)
                  preview_data = query_result[:100]
                  yield json.dumps({"type": "data", "content": preview_data}, default=custom_json_serializer) + "\n"
@@ -183,10 +137,12 @@ async def process_graph_stream(request: ChatRequest):
             yield json.dumps({"type": "result", "content": final_answer}, default=custom_json_serializer) + "\n"
 
         except Exception as e:
-            yield json.dumps({"type": "error", "content": f"Graph execution failed: {str(e)}"}, default=custom_json_serializer) + "\n"
+            logger.error(f"Error processing graph result: {str(e)}")
+            yield json.dumps({"type": "error", "content": f"Failed to process graph result: {str(e)}"}, default=custom_json_serializer) + "\n"
 
-    finally:
-        log_queue_ctx.reset(token)
+    except Exception as e:
+        logger.error(f"Graph execution failed: {str(e)}")
+        yield json.dumps({"type": "error", "content": f"Graph execution failed: {str(e)}"}, default=custom_json_serializer) + "\n"
 
 @app.post("/chat")
 async def chat_endpoint(request: ChatRequest):
@@ -203,4 +159,7 @@ async def download_endpoint():
 
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run(app, host="0.0.0.0", port=8000)
+    # uvicorn.run(app, host="0.0.0.0", port=8000)
+    # Using uvicorn run normally would show logs in console unless we pass log_config=None or similar, 
+    # but our setup_logging clears handlers on 'uvicorn' loggers too.
+    uvicorn.run(app, host="0.0.0.0", port=8000, log_config=None)

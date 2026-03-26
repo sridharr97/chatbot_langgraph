@@ -5,7 +5,6 @@ const messages = ref([
   { 
     role: 'assistant', 
     content: 'Hello! I am your database assistant. How can I help you today?',
-    logs: [],
     outputData: [],
     sqlQuery: '',
     isComplete: true
@@ -68,12 +67,11 @@ const handleSendMessage = async () => {
   const newMessage = { 
     id: assistantMessageId,
     role: 'assistant', 
-    logs: [], 
     outputData: [],
     sqlQuery: '',
     content: '', 
     isComplete: false,
-    activeTab: 'processing',
+    activeTab: 'answer',
     hasAutoSwitched: false
   }
   messages.value.push(newMessage)
@@ -109,19 +107,17 @@ const handleSendMessage = async () => {
           const msgIndex = messages.value.findIndex(m => m.id === assistantMessageId)
           if (msgIndex !== -1) {
             const msg = messages.value[msgIndex]
-            if (data.type === 'log') {
-              msg.logs.push(data.content)
-            } else if (data.type === 'data') {
+            if (data.type === 'data') {
               msg.outputData = data.content
             } else if (data.type === 'query') {
               msg.sqlQuery = data.content
             } else if (data.type === 'result') {
               msg.content = data.content
               msg.isComplete = true
-              // Auto-switch tab
+              // Auto-switch tab if it's a large result
               if (!msg.hasAutoSwitched) {
                 const isLargeResult = msg.content.includes("more than 100 records");
-                msg.activeTab = isLargeResult ? 'data' : 'answer';
+                if (isLargeResult) msg.activeTab = 'data';
                 msg.hasAutoSwitched = true
               }
             } else if (data.type === 'error') {
@@ -179,7 +175,6 @@ const handleSendMessage = async () => {
               <!-- Chat Responses (with tabs) -->
               <div v-else class="tabbed-container">
                 <div class="tabs-header">
-                  <!-- Answer Tab -->
                   <button 
                     @click="msg.activeTab = 'answer'" 
                     :class="{ active: msg.activeTab === 'answer' }"
@@ -187,7 +182,6 @@ const handleSendMessage = async () => {
                   >
                     Answer
                   </button>
-                  <!-- Output Data Tab -->
                   <button 
                     @click="msg.activeTab = 'data'" 
                     :class="{ active: msg.activeTab === 'data' }"
@@ -196,7 +190,6 @@ const handleSendMessage = async () => {
                   >
                     Output Data
                   </button>
-                  <!-- SQL Query Tab -->
                   <button 
                     @click="msg.activeTab = 'query'" 
                     :class="{ active: msg.activeTab === 'query' }"
@@ -205,32 +198,11 @@ const handleSendMessage = async () => {
                   >
                     SQL Query
                   </button>
-                  <!-- Query Processing Tab -->
-                  <button 
-                    @click="msg.activeTab = 'processing'" 
-                    :class="{ active: msg.activeTab === 'processing' }"
-                    class="tab-btn"
-                  >
-                    Query Processing
-                  </button>
                 </div>
                 
                 <div class="tab-content">
-                  <!-- Processing Logs Tab -->
-                  <div v-if="msg.activeTab === 'processing'" class="logs-container">
-                    <div v-if="msg.logs.length > 0" class="logs-list">
-                      <div v-for="(log, i) in msg.logs" :key="i" class="log-entry">
-                        {{ log }}
-                      </div>
-                    </div>
-                    <div v-else class="waiting-logs">
-                      <div class="ping-dot"></div>
-                      <span>Waiting for process logs...</span>
-                    </div>
-                  </div>
-                  
                   <!-- Final Answer Tab -->
-                  <div v-else-if="msg.activeTab === 'answer'" class="output-container">
+                  <div v-if="msg.activeTab === 'answer'" class="output-container">
                     <div v-if="msg.content" class="answer-with-copy">
                       <p class="content-text">{{ msg.content }}</p>
                       <button class="copy-icon-btn inline" @click="copyToClipboard(msg.content)" title="Copy Answer">
@@ -522,60 +494,6 @@ body { margin: 0; }
 
 .tab-content {
   min-height: 120px;
-}
-
-.logs-container {
-  background-color: #f3f4f6;
-  padding: 1rem;
-  border-radius: 0.5rem;
-  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
-  font-size: 0.75rem;
-  color: #4b5563;
-  max-height: 350px;
-  overflow-y: auto;
-  border: 1px solid #e5e7eb;
-  box-shadow: inset 0 1px 2px rgba(0,0,0,0.05);
-}
-.log-entry {
-  margin-bottom: 0.375rem;
-  border-bottom: 1px solid #e5e7eb;
-  padding-bottom: 0.375rem;
-  line-height: 1.4;
-}
-.log-entry:last-child {
-  border-bottom: none;
-  margin-bottom: 0;
-  padding-bottom: 0;
-}
-
-.waiting-logs {
-  display: flex;
-  align-items: center;
-  gap: 0.625rem;
-  color: #9ca3af;
-  font-style: italic;
-  justify-content: center;
-  height: 80px;
-}
-.ping-dot {
-  width: 0.5rem;
-  height: 0.5rem;
-  background-color: #3b82f6;
-  border-radius: 9999px;
-  position: relative;
-}
-.ping-dot::after {
-  content: "";
-  position: absolute;
-  width: 100%;
-  height: 100%;
-  background-color: inherit;
-  border-radius: inherit;
-  animation: ping 1.5s cubic-bezier(0, 0, 0.2, 1) infinite;
-}
-
-@keyframes ping {
-  75%, 100% { transform: scale(2.5); opacity: 0; }
 }
 
 .output-container {
