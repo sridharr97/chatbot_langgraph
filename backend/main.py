@@ -160,13 +160,13 @@ async def process_graph_stream(request: ChatRequest):
         # Get result
         try:
             final_state = await future
-            
+
             # Handle CSV saving and preview
             query_result = final_state.get("query_result")
             if query_result and isinstance(query_result, list):
                  # Save full result to CSV
                  save_result_to_csv(query_result)
-                 
+
                  # Prepare preview (first 100)
                  preview_data = query_result[:100]
                  yield json.dumps({"type": "data", "content": preview_data}, default=custom_json_serializer) + "\n"
@@ -174,8 +174,14 @@ async def process_graph_stream(request: ChatRequest):
                  # Clear file if no result
                  save_result_to_csv([])
 
+            # Yield generated SQL for the 'Query' tab
+            generated_sql = final_state.get("generated_sql")
+            if generated_sql:
+                yield json.dumps({"type": "query", "content": generated_sql}, default=custom_json_serializer) + "\n"
+
             final_answer = final_state.get("final_answer", "No answer generated.")
             yield json.dumps({"type": "result", "content": final_answer}, default=custom_json_serializer) + "\n"
+
         except Exception as e:
             yield json.dumps({"type": "error", "content": f"Graph execution failed: {str(e)}"}, default=custom_json_serializer) + "\n"
 

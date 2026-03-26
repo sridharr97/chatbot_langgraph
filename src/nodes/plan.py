@@ -30,11 +30,14 @@ def plan_query(state: AgentState, llm) -> AgentState:
                 "- aggregations: List of aggregations (if needed)\n"
                 "- filters: List of filter conditions in SQL-like syntax\n"
                 "- group_by: List of columns for grouping\n"
+                "- order_by: List of columns to sort the results by. ALWAYS include at least one column to ensure consistent results.\n"
                 "- error: A string describing why the query cannot be fulfilled if the intent asks for fields or data not present in the schema. Set to null if no error.\n"
                 "\n"
                 "CRITICAL: Try to map the intent to the closest matching fields in the schema. If the intent asks for information "
                 "that is NOT present in the provided schema, do NOT attempt to map it to existing columns. "
                 "Instead, populate the 'error' field with a clear explanation.\n"
+                "\n"
+                "MANDATORY: Your plan MUST always include an 'order_by' field to ensure the output data is sorted. Choose the most relevant field (e.g., a date, an ID, a value, or a primary category) for sorting.\n"
                 "Ensure the output is ONLY the JSON object.",
             ),
             ("human", "Intent: {intent}\n\nSchema:\n{schema}"),

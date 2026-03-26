@@ -7,6 +7,7 @@ const messages = ref([
     content: 'Hello! I am your database assistant. How can I help you today?',
     logs: [],
     outputData: [],
+    sqlQuery: '',
     isComplete: true
   }
 ])
@@ -25,6 +26,34 @@ watch(messages, () => {
   scrollToBottom()
 }, { deep: true })
 
+const copyToClipboard = (text) => {
+  navigator.clipboard.writeText(text).then(() => {
+    // Optional: add a temporary "Copied!" tooltip/feedback
+    console.log('Copied to clipboard');
+  }).catch(err => {
+    console.error('Failed to copy text: ', err);
+  });
+}
+
+const formatValue = (value) => {
+  if (value === null || value === undefined) return '-'
+  
+  // Date formatting: check if it matches ISO format or common date patterns
+  if (typeof value === 'string' && /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}/.test(value)) {
+    return value.split('T')[0]
+  }
+  if (typeof value === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(value)) {
+    return value
+  }
+
+  // Number formatting: thousands separator
+  if (typeof value === 'number') {
+    return value.toLocaleString()
+  }
+
+  return value
+}
+
 const handleSendMessage = async () => {
   if (!input.value.trim()) return
 
@@ -41,6 +70,7 @@ const handleSendMessage = async () => {
     role: 'assistant', 
     logs: [], 
     outputData: [],
+    sqlQuery: '',
     content: '', 
     isComplete: false,
     activeTab: 'processing',
@@ -83,6 +113,8 @@ const handleSendMessage = async () => {
               msg.logs.push(data.content)
             } else if (data.type === 'data') {
               msg.outputData = data.content
+            } else if (data.type === 'query') {
+              msg.sqlQuery = data.content
             } else if (data.type === 'result') {
               msg.content = data.content
               msg.isComplete = true
@@ -128,7 +160,12 @@ const handleSendMessage = async () => {
         <div :class="['message-bubble', msg.role]">
           <!-- USER MESSAGE -->
           <template v-if="msg.role === 'user'">
-            <p class="content-text">{{ msg.content }}</p>
+            <div class="user-message-content">
+              <p class="content-text">{{ msg.content }}</p>
+              <button class="copy-icon-btn" @click="copyToClipboard(msg.content)" title="Copy Query">
+                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>
+              </button>
+            </div>
           </template>
 
           <!-- ASSISTANT MESSAGE -->
@@ -142,13 +179,7 @@ const handleSendMessage = async () => {
               <!-- Chat Responses (with tabs) -->
               <div v-else class="tabbed-container">
                 <div class="tabs-header">
-                  <button 
-                    @click="msg.activeTab = 'processing'" 
-                    :class="{ active: msg.activeTab === 'processing' }"
-                    class="tab-btn"
-                  >
-                    Query Processing
-                  </button>
+                  <!-- Answer Tab -->
                   <button 
                     @click="msg.activeTab = 'answer'" 
                     :class="{ active: msg.activeTab === 'answer' }"
@@ -156,6 +187,7 @@ const handleSendMessage = async () => {
                   >
                     Answer
                   </button>
+                  <!-- Output Data Tab -->
                   <button 
                     @click="msg.activeTab = 'data'" 
                     :class="{ active: msg.activeTab === 'data' }"
@@ -163,6 +195,23 @@ const handleSendMessage = async () => {
                     v-if="msg.outputData && msg.outputData.length > 0"
                   >
                     Output Data
+                  </button>
+                  <!-- SQL Query Tab -->
+                  <button 
+                    @click="msg.activeTab = 'query'" 
+                    :class="{ active: msg.activeTab === 'query' }"
+                    class="tab-btn"
+                    v-if="msg.sqlQuery"
+                  >
+                    SQL Query
+                  </button>
+                  <!-- Query Processing Tab -->
+                  <button 
+                    @click="msg.activeTab = 'processing'" 
+                    :class="{ active: msg.activeTab === 'processing' }"
+                    class="tab-btn"
+                  >
+                    Query Processing
                   </button>
                 </div>
                 
@@ -182,7 +231,12 @@ const handleSendMessage = async () => {
                   
                   <!-- Final Answer Tab -->
                   <div v-else-if="msg.activeTab === 'answer'" class="output-container">
-                    <p v-if="msg.content" class="content-text">{{ msg.content }}</p>
+                    <div v-if="msg.content" class="answer-with-copy">
+                      <p class="content-text">{{ msg.content }}</p>
+                      <button class="copy-icon-btn inline" @click="copyToClipboard(msg.content)" title="Copy Answer">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>
+                      </button>
+                    </div>
                     <div v-else class="processing-placeholder">
                       <div class="bounce-dots">
                         <span>.</span><span>.</span><span>.</span>
@@ -207,13 +261,23 @@ const handleSendMessage = async () => {
                             </thead>
                             <tbody>
                                 <tr v-for="(row, i) in msg.outputData" :key="i">
-                                    <td v-for="(value, key) in row" :key="key">{{ value }}</td>
+                                    <td v-for="(value, key) in row" :key="key">{{ formatValue(value) }}</td>
                                 </tr>
                             </tbody>
                         </table>
                     </div>
                     <div v-else class="no-data">
                         No data available.
+                    </div>
+                  </div>
+
+                  <!-- SQL Query Tab -->
+                  <div v-else-if="msg.activeTab === 'query'" class="query-container">
+                    <div class="sql-wrapper">
+                      <pre><code>{{ msg.sqlQuery }}</code></pre>
+                      <button class="copy-icon-btn absolute" @click="copyToClipboard(msg.sqlQuery)" title="Copy SQL">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>
+                      </button>
                     </div>
                   </div>
                 </div>
@@ -304,6 +368,7 @@ body { margin: 0; }
   border-radius: 0.75rem;
   box-shadow: 0 1px 3px rgba(0,0,0,0.1);
   font-size: 0.95rem;
+  position: relative;
 }
 .message-bubble.user {
   background-color: #eff6ff;
@@ -317,6 +382,12 @@ body { margin: 0; }
   width: 100%;
 }
 
+.user-message-content {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
 .assistant-content {
   width: 100%;
 }
@@ -324,6 +395,38 @@ body { margin: 0; }
 .content-text {
   white-space: pre-wrap;
   margin: 0;
+}
+
+.answer-with-copy {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 1rem;
+}
+
+.copy-icon-btn {
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: #9ca3af;
+  padding: 4px;
+  border-radius: 4px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s;
+}
+.copy-icon-btn:hover {
+  background-color: #f3f4f6;
+  color: #374151;
+}
+.copy-icon-btn.inline {
+  margin-top: -2px;
+}
+.copy-icon-btn.absolute {
+  position: absolute;
+  top: 0.5rem;
+  right: 0.5rem;
 }
 
 .loading-indicator {
@@ -395,6 +498,7 @@ body { margin: 0; }
   display: flex;
   border-bottom: 1px solid #e5e7eb;
   margin-bottom: 1rem;
+  overflow-x: auto;
 }
 .tab-btn {
   padding: 0.625rem 1.25rem;
@@ -406,6 +510,7 @@ body { margin: 0; }
   color: #6b7280;
   font-weight: 500;
   transition: color 0.2s, border-color 0.2s;
+  white-space: nowrap;
 }
 .tab-btn:hover {
   color: #374151;
@@ -570,5 +675,27 @@ th {
 
 tr:last-child td {
   border-bottom: none;
+}
+
+/* SQL Query Styles */
+.sql-wrapper {
+  position: relative;
+  background-color: #1e293b;
+  border-radius: 0.5rem;
+  padding: 1rem;
+  color: #e2e8f0;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+  font-size: 0.875rem;
+  overflow: hidden;
+}
+
+.sql-wrapper pre {
+  margin: 0;
+  overflow-x: auto;
+}
+
+.sql-wrapper code {
+  white-space: pre-wrap;
+  word-break: break-all;
 }
 </style>
