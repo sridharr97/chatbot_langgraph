@@ -23,7 +23,13 @@ def generate_sql(state: AgentState, llm) -> AgentState:
             (
                 "system",
                 "You are an expert at generating clean SQL queries from structured JSON query plans. "
-                "Output ONLY the SQL code. For string comparisons, use LOWER() to ensure case-insensitivity.",
+                "Output ONLY the SQL code. For string comparisons, use LOWER() to ensure case-insensitivity."
+                "## Database-Specific Instructions"
+                "The target database engine is **DuckDB**. When generating SQL:"
+                "- Use DuckDB-compatible syntax only."
+                "- For date arithmetic, use INTERVAL syntax (e.g., `CURRENT_DATE - INTERVAL '13 months`), NOT SQL Server-style. `DATEADD()` ."
+                "- For string functions, use DuckDB-native functions (e.g., `LOWER()`, `CONCAT()`)."
+                "- Do NOT use functions from SQL Server, PostgreSQL, or MySQL that are not supported in DuckDB."
             ),
             ("human", "Query Plan: {query_plan}"),
         ]

@@ -32,8 +32,8 @@ def plan_query(state: AgentState, llm) -> AgentState:
                 "- group_by: List of columns for grouping\n"
                 "- error: A string describing why the query cannot be fulfilled if the intent asks for fields or data not present in the schema. Set to null if no error.\n"
                 "\n"
-                "CRITICAL: If the intent asks for information (like 'geography', 'location', 'product', etc.) "
-                "that is NOT explicitly present in the provided schema, do NOT attempt to map it to existing columns. "
+                "CRITICAL: Try to map the intent to the closest matching fields in the schema. If the intent asks for information "
+                "that is NOT present in the provided schema, do NOT attempt to map it to existing columns. "
                 "Instead, populate the 'error' field with a clear explanation.\n"
                 "Ensure the output is ONLY the JSON object.",
             ),
