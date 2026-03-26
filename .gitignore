@@ -16,6 +16,9 @@ uv.lock
 certs/
 azure_llm.py
 
+# Log files
+app.log
+
 # Jupyter Notebook checkpoints
 .ipynb_checkpoints
 
