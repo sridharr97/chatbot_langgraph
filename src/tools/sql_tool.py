@@ -105,21 +105,23 @@ def sql_qa_tool(user_query: str) -> dict:
         # query_plan → metadata.query_plan
         
         sql_error = final_state.get("sql_error")
+        query_plan = final_state.get("query_plan", {})
+        plan_error = query_plan.get("error") if isinstance(query_plan, dict) else None
         
         # 3. Status Logic
-        # if state["sql_error"] is None: status = "success" else: status = "error"
-        status = "success" if sql_error is None else "error"
+        # The tool is successful only if there were no plan errors and no SQL execution errors.
+        status = "success" if (sql_error is None and plan_error is None) else "error"
         
         # 4. Construct Structured Tool Output
         return {
             "answer": final_state.get("final_answer", "No answer generated."),
             "data": final_state.get("query_result", []),
             "sql": final_state.get("generated_sql"),
-            "error": sql_error,
+            "error": sql_error or plan_error, # Return the first available error
             "status": status,
             "metadata": {
                 "intent": final_state.get("intent"),
-                "query_plan": final_state.get("query_plan")
+                "query_plan": query_plan
             }
         }
         
