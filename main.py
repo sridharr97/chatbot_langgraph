@@ -1,6 +1,6 @@
 import argparse
 import logging
-from src.graph import create_graph
+from src.agents.sql_agent.graph import create_graph
 
 import os, getpass
 from dotenv import load_dotenv

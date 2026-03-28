@@ -2,13 +2,13 @@ import json
 import os
 import logging
 from langchain_core.prompts import ChatPromptTemplate
-from src.state import AgentState
+from src.agents.sql_agent.state import AgentState
 
 # Initialize logger
 logger = logging.getLogger(__name__)
 
 # Load schema from JSON file
-SCHEMA_PATH = os.path.join(os.path.dirname(__file__), "..", "resources", "schema.json")
+SCHEMA_PATH = os.path.join(os.path.dirname(__file__), "..", "..", "..", "resources", "schema.json")
 with open(SCHEMA_PATH, "r") as f:
     SCHEMA = json.load(f)
 

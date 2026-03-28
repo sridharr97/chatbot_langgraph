@@ -3,15 +3,15 @@ from typing import Literal
 from functools import partial
 
 from langgraph.graph import StateGraph, END
-from src.state import AgentState
-from src.nodes.understand import understand_query
-from src.nodes.plan import plan_query
-from src.nodes.generate import generate_sql
-from src.nodes.validate import validate_sql
-from src.nodes.execute import execute_sql_node
-from src.nodes.check import check_result
-from src.nodes.fix import fix_sql
-from src.nodes.answer import generate_answer
+from src.agents.sql_agent.state import AgentState
+from src.agents.sql_agent.nodes.understand import understand_query
+from src.agents.sql_agent.nodes.plan import plan_query
+from src.agents.sql_agent.nodes.generate import generate_sql
+from src.agents.sql_agent.nodes.validate import validate_sql
+from src.agents.sql_agent.nodes.execute import execute_sql_node
+from src.agents.sql_agent.nodes.check import check_result
+from src.agents.sql_agent.nodes.fix import fix_sql
+from src.agents.sql_agent.nodes.answer import generate_answer
 
 # Initialize logger
 logger = logging.getLogger(__name__)

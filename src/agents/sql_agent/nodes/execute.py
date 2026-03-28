@@ -1,5 +1,5 @@
 import logging
-from src.state import AgentState
+from src.agents.sql_agent.state import AgentState
 from src.tools.duckdb_tool import execute_sql
 
 # Initialize logger

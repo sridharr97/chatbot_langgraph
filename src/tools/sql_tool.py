@@ -5,7 +5,7 @@ from datetime import datetime, date
 from typing import Dict, Any, Optional, List
 from dotenv import load_dotenv
 
-from src.graph import create_graph
+from src.agents.sql_agent.graph import create_graph
 from src.logging_config import setup_logging
 
 # Initialize logging to ensure it works even when imported as a standalone tool

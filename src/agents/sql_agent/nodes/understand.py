@@ -1,7 +1,7 @@
 import json
 import logging
 from langchain_core.prompts import ChatPromptTemplate
-from src.state import AgentState
+from src.agents.sql_agent.state import AgentState
 
 # Initialize logger
 logger = logging.getLogger(__name__)
