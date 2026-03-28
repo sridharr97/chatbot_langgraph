@@ -12,7 +12,10 @@ const messages = ref([
 ])
 const input = ref('')
 const isLoading = ref(false)
+const currentStatusTool = ref('')
+const currentStatusNode = ref('')
 const messagesEndRef = ref(null)
+let abortController = null
 
 const scrollToBottom = async () => {
   await nextTick()
@@ -27,7 +30,6 @@ watch(messages, () => {
 
 const copyToClipboard = (text) => {
   navigator.clipboard.writeText(text).then(() => {
-    // Optional: add a temporary "Copied!" tooltip/feedback
     console.log('Copied to clipboard');
   }).catch(err => {
     console.error('Failed to copy text: ', err);
@@ -36,25 +38,43 @@ const copyToClipboard = (text) => {
 
 const formatValue = (value) => {
   if (value === null || value === undefined) return '-'
-  
-  // Date formatting: check if it matches ISO format or common date patterns
   if (typeof value === 'string' && /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}/.test(value)) {
     return value.split('T')[0]
   }
   if (typeof value === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(value)) {
     return value
   }
-
-  // Number formatting: thousands separator
   if (typeof value === 'number') {
     return value.toLocaleString()
   }
-
   return value
 }
 
+const handleStopProcess = () => {
+  if (abortController) {
+    abortController.abort()
+    isLoading.value = false
+    currentStatusTool.value = ''
+    currentStatusNode.value = 'Process stopped.'
+    
+    const lastMsg = messages.value[messages.value.length - 1]
+    if (lastMsg && lastMsg.role === 'assistant' && !lastMsg.isComplete) {
+      lastMsg.isComplete = true
+      lastMsg.content = lastMsg.content || 'Process stopped by user.'
+      lastMsg.activeTab = 'answer'
+    }
+  }
+}
+
+const handleKeydown = (e) => {
+  if (e.key === 'Enter' && !e.shiftKey) {
+    e.preventDefault()
+    handleSendMessage()
+  }
+}
+
 const handleSendMessage = async () => {
-  if (!input.value.trim()) return
+  if (!input.value.trim() || isLoading.value) return
 
   const userMessage = { role: 'user', content: input.value }
   messages.value.push(userMessage)
@@ -62,6 +82,10 @@ const handleSendMessage = async () => {
   const currentInput = input.value
   input.value = ''
   isLoading.value = true
+  currentStatusTool.value = 'Thinking...'
+  currentStatusNode.value = ''
+  
+  abortController = new AbortController()
 
   const assistantMessageId = Date.now()
   const newMessage = { 
@@ -83,6 +107,7 @@ const handleSendMessage = async () => {
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({ message: currentInput }),
+      signal: abortController.signal
     })
 
     if (!response.body) throw new Error('ReadableStream not supported')
@@ -107,14 +132,24 @@ const handleSendMessage = async () => {
           const msgIndex = messages.value.findIndex(m => m.id === assistantMessageId)
           if (msgIndex !== -1) {
             const msg = messages.value[msgIndex]
-            if (data.type === 'data') {
+            
+            if (data.type === 'status') {
+              const status = data.content
+              if (status.includes('Calling SQL QA Tool')) {
+                currentStatusTool.value = status
+                currentStatusNode.value = ''
+              } else if (status.includes('Processing:')) {
+                currentStatusNode.value = status
+              } else {
+                currentStatusTool.value = status
+              }
+            } else if (data.type === 'data') {
               msg.outputData = data.content
             } else if (data.type === 'query') {
               msg.sqlQuery = data.content
             } else if (data.type === 'result') {
               msg.content = data.content
               msg.isComplete = true
-              // Auto-switch tab if it's a large result
               if (!msg.hasAutoSwitched) {
                 const isLargeResult = msg.content.includes("more than 100 records");
                 if (isLargeResult) msg.activeTab = 'data';
@@ -132,15 +167,22 @@ const handleSendMessage = async () => {
       }
     }
   } catch (error) {
-    console.error('Error sending message:', error)
-    const msgIndex = messages.value.findIndex(m => m.id === assistantMessageId)
-    if (msgIndex !== -1) {
-      messages.value[msgIndex].content = 'Sorry, I encountered an error connecting to the server.'
-      messages.value[msgIndex].isComplete = true
-      messages.value[msgIndex].activeTab = 'answer'
+    if (error.name === 'AbortError') {
+      console.log('Fetch aborted')
+    } else {
+      console.error('Error sending message:', error)
+      const msgIndex = messages.value.findIndex(m => m.id === assistantMessageId)
+      if (msgIndex !== -1) {
+        messages.value[msgIndex].content = 'Sorry, I encountered an error connecting to the server.'
+        messages.value[msgIndex].isComplete = true
+        messages.value[msgIndex].activeTab = 'answer'
+      }
     }
   } finally {
     isLoading.value = false
+    abortController = null
+    currentStatusTool.value = ''
+    currentStatusNode.value = ''
   }
 }
 </script>
@@ -154,7 +196,6 @@ const handleSendMessage = async () => {
     <main class="messages-area">
       <div v-for="(msg, index) in messages" :key="index" :class="['message-wrapper', msg.role]">
         <div :class="['message-bubble', msg.role]">
-          <!-- USER MESSAGE -->
           <template v-if="msg.role === 'user'">
             <div class="user-message-content">
               <p class="content-text">{{ msg.content }}</p>
@@ -164,44 +205,20 @@ const handleSendMessage = async () => {
             </div>
           </template>
 
-          <!-- ASSISTANT MESSAGE -->
           <template v-else>
             <div class="assistant-content">
-              <!-- Initial Greeting (no tabs) -->
               <div v-if="!msg.id">
                 <p class="content-text">{{ msg.content }}</p>
               </div>
 
-              <!-- Chat Responses (with tabs) -->
               <div v-else class="tabbed-container">
                 <div class="tabs-header">
-                  <button 
-                    @click="msg.activeTab = 'answer'" 
-                    :class="{ active: msg.activeTab === 'answer' }"
-                    class="tab-btn"
-                  >
-                    Answer
-                  </button>
-                  <button 
-                    @click="msg.activeTab = 'data'" 
-                    :class="{ active: msg.activeTab === 'data' }"
-                    class="tab-btn"
-                    v-if="msg.outputData && msg.outputData.length > 0"
-                  >
-                    Output Data
-                  </button>
-                  <button 
-                    @click="msg.activeTab = 'query'" 
-                    :class="{ active: msg.activeTab === 'query' }"
-                    class="tab-btn"
-                    v-if="msg.sqlQuery"
-                  >
-                    SQL Query
-                  </button>
+                  <button @click="msg.activeTab = 'answer'" :class="{ active: msg.activeTab === 'answer' }" class="tab-btn">Answer</button>
+                  <button @click="msg.activeTab = 'data'" :class="{ active: msg.activeTab === 'data' }" class="tab-btn" v-if="msg.outputData && msg.outputData.length > 0">Output Data</button>
+                  <button @click="msg.activeTab = 'query'" :class="{ active: msg.activeTab === 'query' }" class="tab-btn" v-if="msg.sqlQuery">SQL Query</button>
                 </div>
                 
                 <div class="tab-content">
-                  <!-- Final Answer Tab -->
                   <div v-if="msg.activeTab === 'answer'" class="output-container">
                     <div v-if="msg.content" class="answer-with-copy">
                       <p class="content-text">{{ msg.content }}</p>
@@ -210,40 +227,27 @@ const handleSendMessage = async () => {
                       </button>
                     </div>
                     <div v-else class="processing-placeholder">
-                      <div class="bounce-dots">
-                        <span>.</span><span>.</span><span>.</span>
+                      <div class="bounce-dots"><span>.</span><span>.</span><span>.</span></div>
+                      <div class="status-stack">
+                        <span class="status-tool">{{ currentStatusTool || 'Thinking...' }}</span>
+                        <span v-if="currentStatusNode" class="status-node">{{ currentStatusNode }}</span>
                       </div>
-                      <span>Processing final answer...</span>
                     </div>
                   </div>
 
-                  <!-- Output Data Tab -->
                   <div v-else-if="msg.activeTab === 'data'" class="data-container">
                     <div class="data-actions" v-if="index === messages.length - 1">
-                        <a href="/api/download" download="query_result.csv" class="download-btn">
-                            Download CSV
-                        </a>
+                        <a href="/api/download" download="query_result.csv" class="download-btn">Download CSV</a>
                     </div>
                     <div class="table-wrapper" v-if="msg.outputData && msg.outputData.length > 0">
                         <table>
-                            <thead>
-                                <tr>
-                                    <th v-for="(value, key) in msg.outputData[0]" :key="key">{{ key }}</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                <tr v-for="(row, i) in msg.outputData" :key="i">
-                                    <td v-for="(value, key) in row" :key="key">{{ formatValue(value) }}</td>
-                                </tr>
-                            </tbody>
+                            <thead><tr><th v-for="(value, key) in msg.outputData[0]" :key="key">{{ key }}</th></tr></thead>
+                            <tbody><tr v-for="(row, i) in msg.outputData" :key="i"><td v-for="(value, key) in row" :key="key">{{ formatValue(value) }}</td></tr></tbody>
                         </table>
                     </div>
-                    <div v-else class="no-data">
-                        No data available.
-                    </div>
+                    <div v-else class="no-data">No data available.</div>
                   </div>
 
-                  <!-- SQL Query Tab -->
                   <div v-else-if="msg.activeTab === 'query'" class="query-container">
                     <div class="sql-wrapper">
                       <pre><code>{{ msg.sqlQuery }}</code></pre>
@@ -259,20 +263,35 @@ const handleSendMessage = async () => {
         </div>
       </div>
       <div v-if="isLoading" class="loading-indicator">
-        <span class="processing-text">Processing...</span>
+        <div class="status-stack mini">
+          <span class="processing-text">{{ currentStatusTool || 'Processing...' }}</span>
+          <span v-if="currentStatusNode" class="processing-text sub">{{ currentStatusNode }}</span>
+        </div>
       </div>
       <div ref="messagesEndRef"></div>
     </main>
 
     <footer class="footer">
       <form @submit.prevent="handleSendMessage" class="input-form">
-        <input
-          v-model="input"
-          type="text"
-          placeholder="Ask about your data..."
-          class="chat-input"
-          :disabled="isLoading"
-        />
+        <div class="input-container">
+          <textarea
+            v-model="input"
+            @keydown="handleKeydown"
+            placeholder="Ask about your data..."
+            class="chat-input"
+            :disabled="isLoading"
+            rows="1"
+          ></textarea>
+          <button
+            v-if="isLoading"
+            type="button"
+            @click="handleStopProcess"
+            class="stop-button"
+            title="Stop Process"
+          >
+            <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="6" width="12" height="12" rx="2" ry="2"></rect></svg>
+          </button>
+        </div>
         <button
           type="submit"
           :disabled="isLoading || !input.trim()"
@@ -286,7 +305,6 @@ const handleSendMessage = async () => {
 </template>
 
 <style>
-/* Global styles */
 :root {
   font-family: Inter, system-ui, Avenir, Helvetica, Arial, sans-serif;
   line-height: 1.5;
@@ -356,13 +374,11 @@ body { margin: 0; }
 
 .user-message-content {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   gap: 0.75rem;
 }
 
-.assistant-content {
-  width: 100%;
-}
+.assistant-content { width: 100%; }
 
 .content-text {
   white-space: pre-wrap;
@@ -392,9 +408,7 @@ body { margin: 0; }
   background-color: #f3f4f6;
   color: #374151;
 }
-.copy-icon-btn.inline {
-  margin-top: -2px;
-}
+.copy-icon-btn.inline { margin-top: -2px; }
 .copy-icon-btn.absolute {
   position: absolute;
   top: 0.5rem;
@@ -406,10 +420,33 @@ body { margin: 0; }
   justify-content: flex-start;
   padding-left: 0.5rem;
 }
+
+.status-stack {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.25rem;
+}
+.status-stack.mini { align-items: flex-start; }
+
+.status-tool {
+  font-weight: 600;
+  color: #374151;
+}
+.status-node {
+  font-size: 0.85rem;
+  color: #6b7280;
+  font-style: italic;
+}
+
 .processing-text {
   font-size: 0.875rem;
   color: #9ca3af;
   animation: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+}
+.processing-text.sub {
+  font-size: 0.75rem;
+  animation-delay: 0.5s;
 }
 
 @keyframes pulse {
@@ -426,7 +463,15 @@ body { margin: 0; }
   max-width: 56rem;
   margin: 0 auto;
   display: flex;
+  align-items: flex-end;
   gap: 0.75rem;
+}
+
+.input-container {
+  flex: 1;
+  position: relative;
+  display: flex;
+  align-items: center;
 }
 
 .chat-input {
@@ -434,14 +479,37 @@ body { margin: 0; }
   background-color: #f9fafb;
   border: 1px solid #d1d5db;
   border-radius: 0.5rem;
-  padding: 0.75rem 1rem;
+  padding: 0.75rem 3rem 0.75rem 1rem;
   outline: none;
   transition: border-color 0.2s, box-shadow 0.2s;
+  resize: vertical;
+  min-height: 44px;
+  max-height: 200px;
+  font-family: inherit;
+  font-size: 0.95rem;
+  line-height: 1.4;
 }
 .chat-input:focus {
   border-color: #3b82f6;
   box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
 }
+
+.stop-button {
+  position: absolute;
+  right: 0.75rem;
+  bottom: 0.75rem;
+  background: none;
+  border: none;
+  color: #ef4444;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 4px;
+  border-radius: 4px;
+  transition: background-color 0.2s;
+}
+.stop-button:hover { background-color: #fee2e2; }
 
 .send-button {
   background-color: #2563eb;
@@ -452,20 +520,16 @@ body { margin: 0; }
   cursor: pointer;
   font-weight: 600;
   transition: background-color 0.2s;
+  height: 44px;
 }
-.send-button:hover:not(:disabled) {
-  background-color: #1d4ed8;
-}
+.send-button:hover:not(:disabled) { background-color: #1d4ed8; }
 .send-button:disabled {
   opacity: 0.5;
   cursor: not-allowed;
 }
 
 /* Tabbed Container Styles */
-.tabbed-container {
-  display: flex;
-  flex-direction: column;
-}
+.tabbed-container { display: flex; flex-direction: column; }
 .tabs-header {
   display: flex;
   border-bottom: 1px solid #e5e7eb;
@@ -484,21 +548,15 @@ body { margin: 0; }
   transition: color 0.2s, border-color 0.2s;
   white-space: nowrap;
 }
-.tab-btn:hover {
-  color: #374151;
-}
+.tab-btn:hover { color: #374151; }
 .tab-btn.active {
   color: #2563eb;
   border-bottom-color: #2563eb;
 }
 
-.tab-content {
-  min-height: 120px;
-}
+.tab-content { min-height: 120px; }
 
-.output-container {
-  animation: fadeIn 0.3s ease-out;
-}
+.output-container { animation: fadeIn 0.3s ease-out; }
 
 @keyframes fadeIn {
   from { opacity: 0; transform: translateY(5px); }
@@ -516,10 +574,7 @@ body { margin: 0; }
   gap: 0.5rem;
 }
 
-.bounce-dots {
-  display: flex;
-  gap: 0.25rem;
-}
+.bounce-dots { display: flex; gap: 0.25rem; }
 .bounce-dots span {
   width: 0.4rem;
   height: 0.4rem;
@@ -536,17 +591,8 @@ body { margin: 0; }
 }
 
 /* Data Table Styles */
-.data-container {
-  display: flex;
-  flex-direction: column;
-  gap: 1rem;
-}
-
-.data-actions {
-  display: flex;
-  justify-content: flex-end;
-}
-
+.data-container { display: flex; flex-direction: column; gap: 1rem; }
+.data-actions { display: flex; justify-content: flex-end; }
 .download-btn {
   background-color: #10b981;
   color: white;
@@ -557,9 +603,7 @@ body { margin: 0; }
   font-weight: 500;
   transition: background-color 0.2s;
 }
-.download-btn:hover {
-  background-color: #059669;
-}
+.download-btn:hover { background-color: #059669; }
 
 .table-wrapper {
   overflow-x: auto;
@@ -576,11 +620,7 @@ table {
   text-align: left;
 }
 
-th, td {
-  padding: 0.75rem 1rem;
-  border-bottom: 1px solid #e5e7eb;
-}
-
+th, td { padding: 0.75rem 1rem; border-bottom: 1px solid #e5e7eb; }
 th {
   background-color: #f9fafb;
   font-weight: 600;
@@ -590,10 +630,7 @@ th {
   top: 0;
   z-index: 10;
 }
-
-tr:last-child td {
-  border-bottom: none;
-}
+tr:last-child td { border-bottom: none; }
 
 /* SQL Query Styles */
 .sql-wrapper {
@@ -606,14 +643,6 @@ tr:last-child td {
   font-size: 0.875rem;
   overflow: hidden;
 }
-
-.sql-wrapper pre {
-  margin: 0;
-  overflow-x: auto;
-}
-
-.sql-wrapper code {
-  white-space: pre-wrap;
-  word-break: break-all;
-}
+.sql-wrapper pre { margin: 0; overflow-x: auto; }
+.sql-wrapper code { white-space: pre-wrap; word-break: break-all; }
 </style>

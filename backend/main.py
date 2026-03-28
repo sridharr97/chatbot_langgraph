@@ -15,11 +15,14 @@ from fastapi.responses import StreamingResponse, FileResponse
 from pydantic import BaseModel
 from dotenv import load_dotenv
 
-# Import graph and logging config
-from src.graph import create_graph
-from src.logging_config import setup_logging
+# LangChain messages
+from langchain_core.messages import HumanMessage
 
-# Initialize logging as per requirement
+# Import orchestrator graph and logging config
+from orchestrator.graph import create_orchestrator_graph
+from src.logging_config import setup_logging, reset_log_file
+
+# Initialize logging
 setup_logging()
 logger = logging.getLogger(__name__)
 
@@ -40,12 +43,39 @@ def custom_json_serializer(obj):
     """Custom JSON serializer for objects not serializable by default json code"""
     if isinstance(obj, (datetime, date)):
         return obj.isoformat()
-    # Handle pandas/duckdb Timestamps if they have an isoformat or __str__
     if hasattr(obj, 'isoformat'):
         return obj.isoformat()
     return str(obj)
 
-# Initialize LLM and LangGraph
+# --- 1. Status Tracking Handler ---
+
+class UIStatusHandler(logging.Handler):
+    """
+    Captures specific log patterns to send as UI status updates.
+    """
+    def __init__(self, queue, loop):
+        super().__init__()
+        self.queue = queue
+        self.loop = loop
+
+    def emit(self, record):
+        msg = record.getMessage()
+        if "---" in msg:
+            # Clean up the message for the UI
+            clean_msg = msg.replace("---", "").strip()
+            # If it's a node log, format it nicely
+            if "NODE:" in clean_msg:
+                clean_msg = clean_msg.replace("NODE:", "Processing:").strip()
+            if "ORCHESTRATOR: Calling" in clean_msg:
+                clean_msg = "Calling SQL QA Tool..."
+            
+            try:
+                self.loop.call_soon_threadsafe(self.queue.put_nowait, clean_msg)
+            except:
+                pass
+
+# --- 2. Graph and App Init ---
+
 def get_llm(ENV: str):
     if ENV == "local":
         from langchain_openai import ChatOpenAI
@@ -62,12 +92,10 @@ def get_llm(ENV: str):
         raise ValueError(f"Unsupported ENV: {ENV}")
 
 llm = get_llm(ENV)
-graph_app = create_graph(llm)
+graph_app = create_orchestrator_graph(llm)
 
-# Initialize FastAPI app
-app = FastAPI(title="LangGraph Chatbot API")
+app = FastAPI(title="LangGraph Orchestrator API")
 
-# Add CORS middleware
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -87,11 +115,9 @@ class ChatRequest(BaseModel):
 def save_result_to_csv(data: list):
     """Saves the query result to a CSV file."""
     if not data:
-        # Create empty file
         with open(LATEST_RESULT_FILE, "w", newline="") as f:
             pass
         return
-
     keys = data[0].keys()
     with open(LATEST_RESULT_FILE, "w", newline="") as f:
         dict_writer = csv.DictWriter(f, fieldnames=keys)
@@ -100,56 +126,86 @@ def save_result_to_csv(data: list):
 
 async def process_graph_stream(request: ChatRequest):
     """
-    Generator that yields the final result and the data preview.
-    Runtime logs are no longer streamed.
+    Generator that yields real-time status updates and final results.
     """
+    # Reset log file for every new user query
+    reset_log_file()
+    
+    queue = asyncio.Queue()
+    loop = asyncio.get_running_loop()
+    status_handler = UIStatusHandler(queue, loop)
+    
+    # Attach handler to relevant loggers
+    src_logger = logging.getLogger("src")
+    orch_logger = logging.getLogger("orchestrator")
+    src_logger.addHandler(status_handler)
+    orch_logger.addHandler(status_handler)
+
     try:
-        # Run graph.invoke in a thread
-        def run_with_context():
-            return graph_app.invoke({"user_query": request.message, "retry_count": 0})
+        # Initial state
+        inputs = {
+            "messages": [HumanMessage(content=request.message)],
+            "sql_tool_results": [],
+            "orchestrator_retry_count": 0
+        }
 
-        future = asyncio.get_running_loop().run_in_executor(None, run_with_context)
-        
-        # Wait for future to complete
-        final_state = await future
-            
-        # Get result
-        try:
-            # Handle CSV saving and preview
-            query_result = final_state.get("query_result")
+        # Run graph in a separate task
+        # We provide a fixed thread_id to enable persistent memory for this session
+        config = {"configurable": {"thread_id": "default_user_session"}}
+        graph_task = asyncio.create_task(graph_app.ainvoke(inputs, config=config))
+
+        # Stream status updates from the queue while the graph runs
+        while not graph_task.done():
+            try:
+                # Wait for a status message or graph completion
+                done, pending = await asyncio.wait(
+                    [asyncio.create_task(queue.get()), graph_task],
+                    return_when=asyncio.FIRST_COMPLETED
+                )
+                
+                # Check if we have a new status message
+                for task in done:
+                    if task != graph_task:
+                        status_msg = task.result()
+                        yield json.dumps({"type": "status", "content": status_msg}) + "\n"
+                    
+            except asyncio.TimeoutError:
+                continue
+
+        # Get the final state
+        final_state = await graph_task
+
+        # --- Output Mapping ---
+        sql_tool_results = final_state.get("sql_tool_results", [])
+        last_sql_result = sql_tool_results[-1] if sql_tool_results else None
+
+        if last_sql_result:
+            query_result = last_sql_result.get("data")
             if query_result and isinstance(query_result, list):
-                 # Save full result to CSV
                  save_result_to_csv(query_result)
-                 
-                 # Prepare preview (first 100)
-                 preview_data = query_result[:100]
-                 yield json.dumps({"type": "data", "content": preview_data}, default=custom_json_serializer) + "\n"
-            else:
-                 # Clear file if no result
-                 save_result_to_csv([])
-
-            # Yield generated SQL for the 'Query' tab
-            generated_sql = final_state.get("generated_sql")
+                 yield json.dumps({"type": "data", "content": query_result[:100]}, default=custom_json_serializer) + "\n"
+            
+            generated_sql = last_sql_result.get("sql")
             if generated_sql:
                 yield json.dumps({"type": "query", "content": generated_sql}, default=custom_json_serializer) + "\n"
 
-            final_answer = final_state.get("final_answer", "No answer generated.")
-            yield json.dumps({"type": "result", "content": final_answer}, default=custom_json_serializer) + "\n"
+        messages = final_state.get("messages", [])
+        final_answer = messages[-1].content if messages else "No answer generated."
+        yield json.dumps({"type": "result", "content": final_answer}, default=custom_json_serializer) + "\n"
 
-        except Exception as e:
-            logger.error(f"Error processing graph result: {str(e)}")
-            yield json.dumps({"type": "error", "content": f"Failed to process graph result: {str(e)}"}, default=custom_json_serializer) + "\n"
-
+    except asyncio.CancelledError:
+        logger.info("Request cancelled.")
+        raise
     except Exception as e:
-        logger.error(f"Graph execution failed: {str(e)}")
-        yield json.dumps({"type": "error", "content": f"Graph execution failed: {str(e)}"}, default=custom_json_serializer) + "\n"
+        logger.error(f"Error: {str(e)}")
+        yield json.dumps({"type": "error", "content": str(e)}) + "\n"
+    finally:
+        src_logger.removeHandler(status_handler)
+        orch_logger.removeHandler(status_handler)
 
 @app.post("/chat")
 async def chat_endpoint(request: ChatRequest):
-    return StreamingResponse(
-        process_graph_stream(request), 
-        media_type="application/x-ndjson"
-    )
+    return StreamingResponse(process_graph_stream(request), media_type="application/x-ndjson")
 
 @app.get("/download")
 async def download_endpoint():
@@ -159,7 +215,4 @@ async def download_endpoint():
 
 if __name__ == "__main__":
     import uvicorn
-    # uvicorn.run(app, host="0.0.0.0", port=8000)
-    # Using uvicorn run normally would show logs in console unless we pass log_config=None or similar, 
-    # but our setup_logging clears handlers on 'uvicorn' loggers too.
     uvicorn.run(app, host="0.0.0.0", port=8000, log_config=None)

@@ -5,7 +5,7 @@ from pydantic import BaseModel, Field
 
 class AgentState(TypedDict):
     """
-    Pydantic state model for the chatbot agent.
+    Pydantic state model for the SQL QA agent.
 
     Attributes:
         user_query (str): The natural language query from the user.

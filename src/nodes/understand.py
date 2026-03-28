@@ -22,6 +22,9 @@ def understand_query(state: AgentState, llm) -> AgentState:
                 "- metrics: List of metrics mentioned (e.g., salary, employee count)\n"
                 "- dimensions: List of dimensions mentioned (e.g., department, name)\n"
                 "- filters: Dictionary of filters mentioned (e.g., {{'name': 'Alice'}})\n"
+                "- sorting: List of fields to sort by (if mentioned)\n"
+                "- joins: List of any implied joins (if mentioned)\n"
+                "- limit: An integer specifying the maximum number of rows to return (if applicable)\n"
                 "Ensure the output is ONLY the JSON object.",
             ),
             ("human", "Query: {user_query}"),

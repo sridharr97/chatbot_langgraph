@@ -34,13 +34,11 @@ def generate_answer(state: AgentState, llm) -> AgentState:
         logger.info(f"Final Answer: {final_answer.content}")
         return {**state, "final_answer": final_answer.content}
 
-    # Check if result is too large
+    # 1. SQL QA Agent Rule: Only pass data to LLM if <= 100 rows
     if query_result and isinstance(query_result, list) and len(query_result) > 100:
-        msg = "The data retrieved is more than 100 records and hence I cannot analyze it. You can view and download the output data in 'Output Data' tab."
+        msg = f"The data retrieved for your query contains {len(query_result)} records, which is more than 100 records and hence I cannot analyze it. You can view and download the output data in 'Output Data' tab."
         logger.info(f"Final Answer (Static): {msg}")
         return {**state, "final_answer": msg}
-
-    logger.info(f"Data for Answer: {query_result}")
 
     if state["retry_count"] > 3 and not query_result:
         ans = "Unable to retrieve correct data after multiple attempts"
