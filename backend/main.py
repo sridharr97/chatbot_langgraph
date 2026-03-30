@@ -141,17 +141,27 @@ async def process_graph_stream(request: ChatRequest):
     orch_logger.addHandler(status_handler)
 
     try:
-        # Initial state
+        # Configuration for persistence
+        thread_id = request.thread_id or "default_user_session"
+        config = {"configurable": {"thread_id": thread_id}}
+
+        # IMPORTANT: Get baseline of existing tool results before this turn starts.
+        # This prevents results from previous messages in the same thread from
+        # leaking into the UI tabs of the current message.
+        try:
+            current_state = await graph_app.aget_state(config)
+            baseline_results_count = len(current_state.values.get("sql_tool_results", []))
+        except:
+            baseline_results_count = 0
+
+        # Initial state for this turn
         inputs = {
             "messages": [HumanMessage(content=request.message)],
-            "sql_tool_results": [],
+            "sql_tool_results": [], # This will be appended to existing list due to reducer
             "orchestrator_retry_count": 0
         }
 
         # Run graph in a separate task
-        # Use the thread_id provided by the frontend to enable session-specific memory
-        thread_id = request.thread_id or "default_user_session"
-        config = {"configurable": {"thread_id": thread_id}}
         graph_task = asyncio.create_task(graph_app.ainvoke(inputs, config=config))
 
         # Stream status updates from the queue while the graph runs
@@ -176,30 +186,31 @@ async def process_graph_stream(request: ChatRequest):
         final_state = await graph_task
 
         # --- Output Mapping ---
-        # Robustly scan ALL tool results to find the ones needed for the UI tabs
-        sql_tool_results = final_state.get("sql_tool_results", [])
+        # Robustly scan ONLY the NEW tool results added during THIS turn
+        all_results = final_state.get("sql_tool_results", [])
+        new_results = all_results[baseline_results_count:]
         
-        # 1. Find the LAST valid data result (for Output Data tab)
+        # 1. Find the LAST valid data result (for Output Data tab) from this turn
         data_to_send = None
-        for res in reversed(sql_tool_results):
+        for res in reversed(new_results):
             if res.get("data"):
                 data_to_send = res.get("data")
                 break
         
-        # 2. Find the LAST valid SQL query (for SQL Query tab)
+        # 2. Find the LAST valid SQL query (for SQL Query tab) from this turn
         sql_to_send = None
-        for res in reversed(sql_tool_results):
+        for res in reversed(new_results):
             if res.get("sql"):
                 sql_to_send = res.get("sql")
                 break
 
         if data_to_send:
-            logger.info(f"UI Mapping: Sending data result ({len(data_to_send)} rows)")
+            logger.info(f"UI Mapping: Sending NEW data result ({len(data_to_send)} rows)")
             save_result_to_csv(data_to_send)
             yield json.dumps({"type": "data", "content": data_to_send[:100]}, default=custom_json_serializer) + "\n"
         
         if sql_to_send:
-            logger.info("UI Mapping: Sending SQL query")
+            logger.info("UI Mapping: Sending NEW SQL query")
             yield json.dumps({"type": "query", "content": sql_to_send}, default=custom_json_serializer) + "\n"
 
         messages = final_state.get("messages", [])
