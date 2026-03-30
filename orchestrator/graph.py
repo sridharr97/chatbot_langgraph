@@ -67,6 +67,12 @@ def call_model(state: OrchestratorState, config: Dict[str, Any]):
         messages.append(SystemMessage(content="CRITICAL: You have reached the maximum retry limit. Do NOT call any more tools. Provide the best possible answer based on the information you already have."))
 
     response = llm.invoke(messages)
+
+    # Force sequential execution: If LLM returns multiple tool calls, only keep the first one.
+    if hasattr(response, "tool_calls") and len(response.tool_calls) > 1:
+        logger.info(f"Orchestrator: Multiple tool calls detected ({len(response.tool_calls)}). Truncating to the first one for sequential execution.")
+        response.tool_calls = response.tool_calls[:1]
+
     return {"messages": [response]}
 
 
@@ -82,16 +88,23 @@ def process_tool_outputs(state: OrchestratorState):
         return {}
 
     try:
-        content = json.loads(last_msg.content)
-        
-        # Check if it's a structured tool response (from either SQL or Doc tool)
-        if isinstance(content, dict) and ("sql" in content or "metadata" in content):
+        content = last_msg.content
+        # Ensure content is a dictionary
+        if isinstance(content, str):
+            try:
+                content = json.loads(content)
+            except json.JSONDecodeError:
+                logger.warning(f"Failed to parse ToolMessage content as JSON: {content[:100]}...")
+                return {}
+
+        if isinstance(content, dict):
             # Check for errors to increment retry count
             retry_increment = 0
             if content.get("status") == "error":
                 retry_increment = 1
                 logger.info(f"Orchestrator detected tool error. Incrementing retry count. New count: {state.get('orchestrator_retry_count', 0) + 1}")
 
+            # Create a clean summary for the LLM context to avoid token bloat
             summary_content = {
                 "status": content.get("status"),
                 "answer": content.get("answer"),
@@ -104,19 +117,19 @@ def process_tool_outputs(state: OrchestratorState):
                 id=last_msg.id
             )
             
+            # Prepare result dictionary. 
+            # Note: sql_tool_results is now an Annotated list with operator.add reducer,
+            # so we MUST return a list containing the new result.
             res = {
                 "messages": [updated_tool_msg],
-                "orchestrator_retry_count": state.get("orchestrator_retry_count", 0) + retry_increment
+                "orchestrator_retry_count": state.get("orchestrator_retry_count", 0) + retry_increment,
+                "sql_tool_results": [content] # Append the full result to the state
             }
             
-            # Keep full results for the UI if it was SQL data
-            if "sql" in content and content.get("sql"):
-                res["sql_tool_results"] = [content]
-                
             return res
             
     except Exception as e:
-        logger.warning(f"Failed to process tool output: {e}")
+        logger.warning(f"Error in process_tool_outputs: {e}")
         
     return {}
 
@@ -128,7 +141,15 @@ def create_orchestrator_graph(llm):
     Creates and compiles the high-level orchestrator graph with persistent memory.
     """
     tools = [sql_query_tool, doc_query_tool]
-    llm_with_tools = llm.bind_tools(tools)
+    
+    # We set parallel_tool_calls=False here to ensure the LLM only suggests one tool at a time.
+    # This is safe here because tools ARE provided to the bind_tools call.
+    try:
+        llm_with_tools = llm.bind_tools(tools, parallel_tool_calls=False)
+    except TypeError:
+        # Fallback if the specific LLM class doesn't support this parameter
+        logger.warning("LLM does not support parallel_tool_calls parameter. Falling back to default binding.")
+        llm_with_tools = llm.bind_tools(tools)
 
     workflow = StateGraph(OrchestratorState)
 

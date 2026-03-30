@@ -13,6 +13,9 @@ def get_llm():
         api_key = os.getenv("OPENAI_API_KEY")
         if not api_key:
              raise ValueError("OPENAI_API_KEY is not set in environment. Please set it or check your .env file.")
+        
+        # We do NOT set parallel_tool_calls here because it causes errors in non-tool-calling nodes.
+        # It should be set during tool binding instead.
         return ChatOpenAI(model="gpt-4o", temperature=0)
     
     elif env == "azure":

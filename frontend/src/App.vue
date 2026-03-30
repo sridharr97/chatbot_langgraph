@@ -15,7 +15,18 @@ const isLoading = ref(false)
 const currentStatusTool = ref('')
 const currentStatusNode = ref('')
 const messagesEndRef = ref(null)
+const sessionThreadId = ref('')
 let abortController = null
+
+// Generate a unique thread ID for this browser session/refresh
+const generateThreadId = () => {
+  return 'thread_' + Date.now() + '_' + Math.random().toString(36).substring(2, 9)
+}
+
+onMounted(() => {
+  sessionThreadId.value = generateThreadId()
+  console.log('Session initialized with thread ID:', sessionThreadId.value)
+})
 
 const scrollToBottom = async () => {
   await nextTick()
@@ -106,7 +117,10 @@ const handleSendMessage = async () => {
       headers: {
         'Content-Type': 'application/json',
       },
-      body: JSON.stringify({ message: currentInput }),
+      body: JSON.stringify({ 
+        message: currentInput,
+        thread_id: sessionThreadId.value
+      }),
       signal: abortController.signal
     })
 
@@ -369,7 +383,6 @@ body { margin: 0; }
   background-color: white;
   border: 1px solid #e5e7eb;
   color: #374151;
-  width: 100%;
 }
 
 .user-message-content {
@@ -378,7 +391,7 @@ body { margin: 0; }
   gap: 0.75rem;
 }
 
-.assistant-content { width: 100%; }
+.assistant-content { }
 
 .content-text {
   white-space: pre-wrap;

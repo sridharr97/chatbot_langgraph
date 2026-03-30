@@ -93,11 +93,11 @@ class DocAgent:
         Orchestrates the two-step Doc QA process.
         """
         try:
-            logger.info(f"--- DOC AGENT: Processing query: '{query}' ---")
+            logger.info(f"\n--- NODE: DocAgent - Processing query: '{query}' ---")
             
             # Step 1: Selection
             doc_name = self.select_document(query)
-            logger.info(f"--- DOC AGENT: Selected '{doc_name}' ---")
+            logger.info(f"--- NODE: DocAgent - Selected '{doc_name}' ---")
             
             # Step 2: Generation
             answer = self.generate_answer(query, doc_name)

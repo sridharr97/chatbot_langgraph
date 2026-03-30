@@ -78,12 +78,26 @@ class UIStatusHandler(logging.Handler):
             except:
                 pass
 
+from contextlib import asynccontextmanager
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """
+    Lifespan context manager for startup and shutdown events.
+    """
+    global _loop
+    try:
+        _loop = asyncio.get_running_loop()
+    except RuntimeError:
+        _loop = None
+    yield
+
 # --- 2. Graph and App Init ---
 
 llm = get_llm()
 graph_app = create_orchestrator_graph(llm)
 
-app = FastAPI(title="LangGraph Orchestrator API")
+app = FastAPI(title="LangGraph Orchestrator API", lifespan=lifespan)
 
 app.add_middleware(
     CORSMiddleware,
@@ -93,13 +107,9 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-@app.on_event("startup")
-async def startup_event():
-    global _loop
-    _loop = asyncio.get_running_loop()
-
 class ChatRequest(BaseModel):
     message: str
+    thread_id: Optional[str] = "default_user_session"
 
 def save_result_to_csv(data: list):
     """Saves the query result to a CSV file."""
@@ -139,8 +149,9 @@ async def process_graph_stream(request: ChatRequest):
         }
 
         # Run graph in a separate task
-        # We provide a fixed thread_id to enable persistent memory for this session
-        config = {"configurable": {"thread_id": "default_user_session"}}
+        # Use the thread_id provided by the frontend to enable session-specific memory
+        thread_id = request.thread_id or "default_user_session"
+        config = {"configurable": {"thread_id": thread_id}}
         graph_task = asyncio.create_task(graph_app.ainvoke(inputs, config=config))
 
         # Stream status updates from the queue while the graph runs
@@ -165,18 +176,31 @@ async def process_graph_stream(request: ChatRequest):
         final_state = await graph_task
 
         # --- Output Mapping ---
+        # Robustly scan ALL tool results to find the ones needed for the UI tabs
         sql_tool_results = final_state.get("sql_tool_results", [])
-        last_sql_result = sql_tool_results[-1] if sql_tool_results else None
+        
+        # 1. Find the LAST valid data result (for Output Data tab)
+        data_to_send = None
+        for res in reversed(sql_tool_results):
+            if res.get("data"):
+                data_to_send = res.get("data")
+                break
+        
+        # 2. Find the LAST valid SQL query (for SQL Query tab)
+        sql_to_send = None
+        for res in reversed(sql_tool_results):
+            if res.get("sql"):
+                sql_to_send = res.get("sql")
+                break
 
-        if last_sql_result:
-            query_result = last_sql_result.get("data")
-            if query_result and isinstance(query_result, list):
-                 save_result_to_csv(query_result)
-                 yield json.dumps({"type": "data", "content": query_result[:100]}, default=custom_json_serializer) + "\n"
-            
-            generated_sql = last_sql_result.get("sql")
-            if generated_sql:
-                yield json.dumps({"type": "query", "content": generated_sql}, default=custom_json_serializer) + "\n"
+        if data_to_send:
+            logger.info(f"UI Mapping: Sending data result ({len(data_to_send)} rows)")
+            save_result_to_csv(data_to_send)
+            yield json.dumps({"type": "data", "content": data_to_send[:100]}, default=custom_json_serializer) + "\n"
+        
+        if sql_to_send:
+            logger.info("UI Mapping: Sending SQL query")
+            yield json.dumps({"type": "query", "content": sql_to_send}, default=custom_json_serializer) + "\n"
 
         messages = final_state.get("messages", [])
         final_answer = messages[-1].content if messages else "No answer generated."
