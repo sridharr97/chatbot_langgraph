@@ -1,68 +1,73 @@
 import argparse
 import logging
-from src.agents.sql_agent.graph import create_graph
-
-import os, getpass
+import os
 from dotenv import load_dotenv
+
+# LangChain and LangGraph imports
+from langchain_core.messages import HumanMessage
+
+# Project imports
+from orchestrator.graph import create_orchestrator_graph
+from src.llm_config import get_llm
+from src.logging_config import setup_logging
+
+# Load environment variables
 load_dotenv()
-ENV = os.getenv("ENV", "azure")
 
-# Configure logging to show process updates in CLI
-logging.basicConfig(level=logging.INFO, format='%(message)s')
-
-def get_llm(ENV: str):
-    if ENV == "local":
-        # import
-        from langchain_openai import ChatOpenAI
-        
-        # Setup environment
-        def _set_env(var: str):
-            if not os.environ.get(var):
-                os.environ[var] = getpass.getpass(f"{var}: ")
-        _set_env("OPENAI_API_KEY")
-
-        # Instantiate LLM globally for the project
-        llm = ChatOpenAI(model="gpt-4o", temperature=0)
-        return llm
-    
-    elif ENV == "azure":
-        # import
-        from azure_llm import AzureOpenAIModel
-
-        # Instantiate LLM globally for the project
-        llm = AzureOpenAIModel()
-        return llm
-    
-    else:
-        raise ValueError(f"Unsupported ENV: {ENV}")
+# Configure logging
+setup_logging()
+logger = logging.getLogger(__name__)
 
 def main():
     """
-    Main function to run the chatbot agent.
+    Main function to run the multi-agent orchestrator from the CLI.
     """
-    # Get LLM based on environment
-    llm = get_llm(ENV)
-
     # Parse arguments
-    parser = argparse.ArgumentParser(description="LangGraph Chatbot Agent")
+    parser = argparse.ArgumentParser(description="Multi-Agent Orchestrator CLI")
     parser.add_argument("query", type=str, help="The user query")
     args = parser.parse_args()
 
+    # Get LLM based on environment configuration
+    try:
+        llm = get_llm()
+    except Exception as e:
+        logger.error(f"Failed to initialize LLM: {e}")
+        return
 
+    # Create the orchestrator graph with the shared LLM
+    # The orchestrator uses a MemorySaver, so we'll need to provide a thread_id in the config.
+    app = create_orchestrator_graph(llm)
 
-    # Create graph with the shared LLM
-    app = create_graph(llm)
+    # Initial state for the orchestrator
+    initial_state = {
+        "messages": [HumanMessage(content=args.query)],
+        "sql_tool_results": [],
+        "orchestrator_retry_count": 0
+    }
 
-    # Invoke graph
-    final_state = app.invoke(
-        {
-            "user_query": args.query,
-            "retry_count": 0,
-        }
-    )
+    # Config with thread_id for persistence
+    config = {"configurable": {"thread_id": "cli_user_session"}}
 
-    # Print final answer
-    print("\n", final_state["final_answer"])
+    print(f"\n--- Processing Query: '{args.query}' ---\n")
+
+    try:
+        # Invoke the orchestrator graph
+        final_state = app.invoke(initial_state, config=config)
+
+        # The final answer is the content of the last message in the state
+        messages = final_state.get("messages", [])
+        if messages:
+            final_answer = messages[-1].content
+            print("\nFinal Answer:")
+            print("-" * 20)
+            print(final_answer)
+            print("-" * 20)
+        else:
+            print("\nNo answer generated.")
+
+    except Exception as e:
+        logger.error(f"Error during orchestrator execution: {e}")
+        print(f"\nSorry, an error occurred while processing your request: {e}")
 
 if __name__ == "__main__":
     main()

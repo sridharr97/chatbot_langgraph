@@ -21,6 +21,7 @@ from langchain_core.messages import HumanMessage
 # Import orchestrator graph and logging config
 from orchestrator.graph import create_orchestrator_graph
 from src.logging_config import setup_logging, reset_log_file
+from src.llm_config import get_llm
 
 # Initialize logging
 setup_logging()
@@ -28,8 +29,6 @@ logger = logging.getLogger(__name__)
 
 # Load environment variables
 load_dotenv()
-
-ENV = os.getenv("ENV", "local")
 
 # Define temp dir and file
 TEMP_DIR = os.path.join(os.path.dirname(__file__), "temp")
@@ -67,7 +66,12 @@ class UIStatusHandler(logging.Handler):
             if "NODE:" in clean_msg:
                 clean_msg = clean_msg.replace("NODE:", "Processing:").strip()
             if "ORCHESTRATOR: Calling" in clean_msg:
-                clean_msg = "Calling SQL QA Tool..."
+                if "SQL QA Tool" in msg:
+                    clean_msg = "Calling SQL QA Tool..."
+                elif "Doc QA Tool" in msg:
+                    clean_msg = "Calling Doc QA Tool..."
+                else:
+                    clean_msg = "Calling tool..."
             
             try:
                 self.loop.call_soon_threadsafe(self.queue.put_nowait, clean_msg)
@@ -76,22 +80,7 @@ class UIStatusHandler(logging.Handler):
 
 # --- 2. Graph and App Init ---
 
-def get_llm(ENV: str):
-    if ENV == "local":
-        from langchain_openai import ChatOpenAI
-        if not os.environ.get("OPENAI_API_KEY"):
-             raise ValueError("OPENAI_API_KEY is not set in environment")
-        return ChatOpenAI(model="gpt-4o", temperature=0)
-    elif ENV == "azure":
-        try:
-            from azure_llm import AzureOpenAIModel
-            return AzureOpenAIModel()
-        except ImportError:
-            raise ImportError("azure_llm.py not found.")
-    else:
-        raise ValueError(f"Unsupported ENV: {ENV}")
-
-llm = get_llm(ENV)
+llm = get_llm()
 graph_app = create_orchestrator_graph(llm)
 
 app = FastAPI(title="LangGraph Orchestrator API")

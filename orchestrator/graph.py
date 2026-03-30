@@ -9,6 +9,7 @@ from langgraph.prebuilt import ToolNode, tools_condition
 from langgraph.checkpoint.memory import MemorySaver
 
 from src.tools.sql_tool import sql_qa_tool
+from src.tools.doc_tool import doc_qa_tool
 from orchestrator.state import OrchestratorState
 
 # Initialize logger
@@ -18,19 +19,31 @@ logger = logging.getLogger(__name__)
 ORCHESTRATOR_SYSTEM_MESSAGE = SystemMessage(
     content="You are an orchestrator. If a question is complex or would require multiple tools, "
             "break it down into multiple queries and make the tool calls accordingly. "
-            "Use the result of one query to inform the next."
+            "Use the result of one query to inform the next.\n\n"
+            "You have access to two tools:\n"
+            "1. sql_query_tool: Use this for database related questions.\n"
+            "2. doc_query_tool: Use this for document related questions."
 )
 
 # --- 2. Tool Wrapping ---
 
 @tool
-def db_query_tool(user_query: str) -> Dict[str, Any]:
+def sql_query_tool(user_query: str) -> Dict[str, Any]:
     """
     Use this tool to query the database. 
-    Input should be a natural language question.
+    Input should be a natural language question related to structured data.
     """
     logger.info(f"\n--- ORCHESTRATOR: Calling SQL QA Tool for query: '{user_query}' ---")
     return sql_qa_tool(user_query)
+
+@tool
+def doc_query_tool(user_query: str) -> Dict[str, Any]:
+    """
+    Use this tool to query internal documents. 
+    Input should be a natural language question related to information available in documents.
+    """
+    logger.info(f"\n--- ORCHESTRATOR: Calling Doc QA Tool for query: '{user_query}' ---")
+    return doc_qa_tool(user_query)
 
 
 # --- 3. Graph Nodes ---
@@ -71,7 +84,8 @@ def process_tool_outputs(state: OrchestratorState):
     try:
         content = json.loads(last_msg.content)
         
-        if isinstance(content, dict) and "sql" in content:
+        # Check if it's a structured tool response (from either SQL or Doc tool)
+        if isinstance(content, dict) and ("sql" in content or "metadata" in content):
             # Check for errors to increment retry count
             retry_increment = 0
             if content.get("status") == "error":
@@ -90,11 +104,16 @@ def process_tool_outputs(state: OrchestratorState):
                 id=last_msg.id
             )
             
-            return {
+            res = {
                 "messages": [updated_tool_msg],
-                "sql_tool_results": [content],
                 "orchestrator_retry_count": state.get("orchestrator_retry_count", 0) + retry_increment
             }
+            
+            # Keep full results for the UI if it was SQL data
+            if "sql" in content and content.get("sql"):
+                res["sql_tool_results"] = [content]
+                
+            return res
             
     except Exception as e:
         logger.warning(f"Failed to process tool output: {e}")
@@ -108,12 +127,13 @@ def create_orchestrator_graph(llm):
     """
     Creates and compiles the high-level orchestrator graph with persistent memory.
     """
-    llm_with_tools = llm.bind_tools([db_query_tool])
+    tools = [sql_query_tool, doc_query_tool]
+    llm_with_tools = llm.bind_tools(tools)
 
     workflow = StateGraph(OrchestratorState)
 
     workflow.add_node("agent", lambda state, config: call_model(state, {**config, "configurable": {"llm": llm_with_tools}}))
-    workflow.add_node("tools", ToolNode([db_query_tool]))
+    workflow.add_node("tools", ToolNode(tools))
     workflow.add_node("process_outputs", process_tool_outputs)
 
     workflow.add_edge(START, "agent")

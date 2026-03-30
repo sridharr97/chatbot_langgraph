@@ -7,6 +7,7 @@ from dotenv import load_dotenv
 
 from src.agents.sql_agent.graph import create_graph
 from src.logging_config import setup_logging
+from src.llm_config import get_llm
 
 # Initialize logging to ensure it works even when imported as a standalone tool
 setup_logging()
@@ -30,38 +31,13 @@ def _json_serializable(obj):
         return obj.isoformat()
     return obj
 
-def _get_llm():
-    """
-    Helper to initialize the LLM based on environment variables.
-    """
-    load_dotenv()
-    env = os.getenv("ENV", "local")
-    
-    if env == "local":
-        from langchain_openai import ChatOpenAI
-        api_key = os.getenv("OPENAI_API_KEY")
-        if not api_key:
-             raise ValueError("OPENAI_API_KEY is not set in environment. Please set it or check your .env file.")
-        return ChatOpenAI(model="gpt-4o", temperature=0)
-    
-    elif env == "azure":
-        try:
-            # We assume azure_llm.py is in the search path
-            from azure_llm import AzureOpenAIModel
-            return AzureOpenAIModel()
-        except ImportError:
-            raise ImportError("azure_llm.py not found. Ensure it is in the PYTHONPATH if ENV=azure.")
-    
-    else:
-        raise ValueError(f"Unsupported ENV: {env}")
-
 def _get_compiled_graph():
     """
     Helper to get or initialize the compiled LangGraph app.
     """
     global _GRAPH_APP
     if _GRAPH_APP is None:
-        llm = _get_llm()
+        llm = get_llm()
         _GRAPH_APP = create_graph(llm)
     return _GRAPH_APP
 

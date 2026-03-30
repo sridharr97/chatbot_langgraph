@@ -1,24 +1,37 @@
-import os
 import duckdb
+import os
 
-def setup_database():
+def ingest_data():
     """
-    Sets up the DuckDB database and populates it with sample data.
+    Creates a sample DuckDB database and populates it with mock data.
     """
-    # Path to the database in resources
-    db_path = os.path.join(os.path.dirname(__file__), "src", "resources", "my_database.db")
+    db_path = "src/resources/my_database.db"
     
-    # Ensure the directory exists (though it should already)
-    os.makedirs(os.path.dirname(db_path), exist_ok=True)
-    
+    # Remove existing db if it exists
+    if os.path.exists(db_path):
+        os.remove(db_path)
+        
     con = duckdb.connect(db_path)
-    con.execute("CREATE OR REPLACE TABLE employees (id INTEGER, name VARCHAR, department VARCHAR, salary INTEGER)")
+    
+    # Create sample table
+    con.execute("""
+        CREATE TABLE employees (
+            id INTEGER,
+            name VARCHAR,
+            department VARCHAR,
+            salary INTEGER
+        )
+    """)
+    
+    # Insert mock data
     con.execute("INSERT INTO employees VALUES (1, 'Alice', 'Engineering', 100000)")
-    con.execute("INSERT INTO employees VALUES (2, 'Bob', 'Engineering', 120000)")
-    con.execute("INSERT INTO employees VALUES (3, 'Charlie', 'Marketing', 90000)")
-    con.execute("INSERT INTO employees VALUES (4, 'David', 'Sales', 80000)")
+    con.execute("INSERT INTO employees VALUES (2, 'Bob', 'Sales', 80000)")
+    con.execute("INSERT INTO employees VALUES (3, 'Charlie', 'Engineering', 120000)")
+    con.execute("INSERT INTO employees VALUES (4, 'David', 'Marketing', 90000)")
     con.execute("INSERT INTO employees VALUES (5, 'Eve', 'Sales', 85000)")
+    
     con.close()
+    print(f"Database created successfully at {db_path}")
 
 if __name__ == "__main__":
-    setup_database()
+    ingest_data()
