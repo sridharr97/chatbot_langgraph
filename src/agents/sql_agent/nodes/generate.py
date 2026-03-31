@@ -23,7 +23,7 @@ def generate_sql(state: AgentState, llm) -> AgentState:
             (
                 "system",
                 "You are an expert at generating clean SQL queries from structured JSON query plans. "
-                "Output ONLY the SQL code. For string comparisons, use LOWER() to ensure case-insensitivity."
+                "Output ONLY the SQL code. For string comparisons, ALWAYS ensure to use LOWER() to handle case-sensitivities."
                 "## Database-Specific Instructions"
                 "The target database engine is **DuckDB**. When generating SQL:"
                 "- Use DuckDB-compatible syntax only."
