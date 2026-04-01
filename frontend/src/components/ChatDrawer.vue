@@ -13,12 +13,12 @@ defineEmits(['close'])
   <div class="drawer-wrapper">
     <!-- Dim Background Overlay -->
     <transition name="fade">
-      <div v-if="isOpen" class="drawer-overlay"></div>
+      <div v-show="isOpen" class="drawer-overlay" @click="$emit('close')"></div>
     </transition>
     
     <!-- Drawer Content -->
     <transition name="slide">
-      <div v-if="isOpen" class="drawer-container">
+      <div v-show="isOpen" class="drawer-container">
         <div class="drawer-header">
           <button @click="$emit('close')" class="close-arrow-btn" title="Close Chatbot">
             <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -61,7 +61,6 @@ defineEmits(['close'])
   z-index: 1001;
   display: flex;
   flex-direction: column;
-  transition: transform 0.3s ease-in-out;
 }
 
 @media (max-width: 1200px) {

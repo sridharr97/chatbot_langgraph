@@ -117,105 +117,111 @@ onMounted(fetchClients)
 <template>
   <div class="dashboard-wrapper">
     <!-- DASHBOARD VIEW -->
-    <div v-if="currentView === 'dashboard'" class="dashboard-layout">
-      <!-- SIDEBAR (20%) -->
-      <aside class="sidebar">
-        <div class="sidebar-header">
-          <h3 class="sidebar-title">Filters</h3>
-        </div>
-        
-        <div class="filter-group">
-          <label for="name-search" class="filter-label">Search Name</label>
-          <div class="input-wrapper">
-            <input 
-              id="name-search"
-              v-model="nameSearch" 
-              type="text" 
-              placeholder="Type to filter..." 
-              class="filter-input"
-            />
+    <div v-if="currentView === 'dashboard'" class="dashboard-view-container">
+      <!-- FULL-WIDTH MAIN HEADER BAR -->
+      <header class="main-header-bar">
+        <h1 class="main-title">Dashboard</h1>
+      </header>
+
+      <div class="dashboard-layout">
+        <!-- SIDEBAR (20%) - Starts below header -->
+        <aside class="sidebar">
+          <div class="sidebar-header">
+            <h3 class="sidebar-title">Filters</h3>
           </div>
-        </div>
-
-        <div class="filter-group">
-          <label for="month-filter" class="filter-label">Select Month</label>
-          <div class="input-wrapper">
-            <select 
-              id="month-filter"
-              v-model="selectedMonth" 
-              class="filter-select"
-            >
-              <option value="">All Months</option>
-              <option v-for="month in uniqueMonths" :key="month" :value="month">
-                {{ month }}
-              </option>
-            </select>
+          
+          <div class="filter-group">
+            <label for="name-search" class="filter-label">Search Name</label>
+            <div class="input-wrapper">
+              <input 
+                id="name-search"
+                v-model="nameSearch" 
+                type="text" 
+                placeholder="Type to filter..." 
+                class="filter-input"
+              />
+            </div>
           </div>
-        </div>
 
-        <div class="sidebar-footer">
-          <button @click="nameSearch = ''; selectedMonth = ''; selectedFlag = ''" class="reset-btn">
-            Clear Filters
-          </button>
-        </div>
-      </aside>
-
-      <!-- MAIN CONTENT (80%) -->
-      <main class="main-dashboard">
-        <header class="view-header">
-          <h2 class="view-title">Dashboard</h2>
-          <p class="view-subtitle">Showing {{ filteredClients.length }} records</p>
-        </header>
-
-        <!-- CATEGORY TILES -->
-        <div class="stat-tiles">
-          <div 
-            v-for="(count, flag) in flagCounts" 
-            :key="flag"
-            :class="['stat-tile', getBadgeClass(flag), { active: selectedFlag === flag }]"
-            @click="toggleFlagFilter(flag)"
-          >
-            <span class="tile-label">{{ flag }}</span>
-            <span class="tile-value">{{ count }}</span>
-          </div>
-        </div>
-
-        <div class="table-container">
-          <table class="data-table">
-            <thead>
-              <tr>
-                <th v-for="header in tableHeaders" :key="header">
-                  {{ header.replace(/_/g, ' ') }}
-                </th>
-              </tr>
-            </thead>
-            <tbody>
-              <tr 
-                v-for="client in filteredClients" 
-                :key="client.id" 
-                @click="handleRowClick(client)"
-                class="clickable-row"
+          <div class="filter-group">
+            <label for="month-filter" class="filter-label">Select Month</label>
+            <div class="input-wrapper">
+              <select 
+                id="month-filter"
+                v-model="selectedMonth" 
+                class="filter-select"
               >
-                <td v-for="header in tableHeaders" :key="header">
-                  <template v-if="header === 'flag'">
-                    <span :class="['status-badge', getBadgeClass(client[header])]">
+                <option value="">All Months</option>
+                <option v-for="month in uniqueMonths" :key="month" :value="month">
+                  {{ month }}
+                </option>
+              </select>
+            </div>
+          </div>
+
+          <div class="sidebar-footer">
+            <button @click="nameSearch = ''; selectedMonth = ''; selectedFlag = ''" class="reset-btn">
+              Clear Filters
+            </button>
+          </div>
+        </aside>
+
+        <!-- MAIN CONTENT (80%) -->
+        <main class="main-dashboard">
+          <div class="view-status">
+            <p class="view-subtitle">Showing {{ filteredClients.length }} records</p>
+          </div>
+
+          <!-- CATEGORY TILES -->
+          <div class="stat-tiles">
+            <div 
+              v-for="(count, flag) in flagCounts" 
+              :key="flag"
+              :class="['stat-tile', getBadgeClass(flag), { active: selectedFlag === flag }]"
+              @click="toggleFlagFilter(flag)"
+            >
+              <span class="tile-label">{{ flag }}</span>
+              <span class="tile-value">{{ count }}</span>
+            </div>
+          </div>
+
+          <div class="table-container">
+            <table class="data-table">
+              <thead>
+                <tr>
+                  <th v-for="header in tableHeaders" :key="header">
+                    {{ header.replace(/_/g, ' ') }}
+                  </th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr 
+                  v-for="client in filteredClients" 
+                  :key="client.id" 
+                  @click="handleRowClick(client)"
+                  class="clickable-row"
+                >
+                  <td v-for="header in tableHeaders" :key="header">
+                    <template v-if="header === 'flag'">
+                      <span :class="['status-badge', getBadgeClass(client[header])]">
+                        {{ client[header] }}
+                      </span>
+                    </template>
+                    <template v-else>
                       {{ client[header] }}
-                    </span>
-                  </template>
-                  <template v-else>
-                    {{ client[header] }}
-                  </template>
-                </td>
-              </tr>
-              <tr v-if="filteredClients.length === 0">
-                <td :colspan="tableHeaders.length" class="no-results">
-                  No matching records found.
-                </td>
-              </tr>
-            </tbody>
-          </table>
-        </div>
-      </main>
+                    </template>
+                  </td>
+                </tr>
+                <tr v-if="filteredClients.length === 0">
+                  <td :colspan="tableHeaders.length" class="no-results">
+                    No matching records found.
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </main>
+      </div>
     </div>
 
     <!-- SUMMARY VIEW -->
@@ -246,12 +252,38 @@ onMounted(fetchClients)
   background-color: var(--salt-color-brown-100);
 }
 
-.dashboard-layout {
+.dashboard-view-container {
   display: flex;
+  flex-direction: column;
   min-height: 100vh;
 }
 
-/* SIDEBAR */
+/* FULL-WIDTH MAIN HEADER BAR */
+.main-header-bar {
+  width: 100%;
+  background-color: var(--salt-color-brown-200);
+  padding: 1.5rem 3rem;
+  border-bottom: 1px solid var(--salt-color-brown-300);
+  box-sizing: border-box;
+  position: sticky;
+  top: 0;
+  z-index: 100;
+}
+
+.main-title {
+  font-size: 2.5rem;
+  font-weight: 800;
+  color: var(--salt-color-brown-900);
+  margin: 0;
+  letter-spacing: -0.02em;
+}
+
+.dashboard-layout {
+  display: flex;
+  flex: 1;
+}
+
+/* SIDEBAR - Starts below header */
 .sidebar {
   width: 20%;
   background-color: var(--salt-color-white);
@@ -261,8 +293,9 @@ onMounted(fetchClients)
   flex-direction: column;
   gap: 2rem;
   position: sticky;
-  top: 0;
-  height: 100vh;
+  top: 85px; /* Adjust based on header height */
+  height: calc(100vh - 85px);
+  box-sizing: border-box;
 }
 
 .sidebar-title {
@@ -319,30 +352,28 @@ onMounted(fetchClients)
 /* MAIN CONTENT */
 .main-dashboard {
   width: 80%;
-  padding: 3rem 3rem;
+  padding: 2rem 3rem 3rem 3rem;
   display: flex;
   flex-direction: column;
-  gap: 2rem;
+  gap: 1.5rem;
 }
 
-.view-title {
-  font-size: 2.5rem;
-  font-weight: 800;
-  color: var(--salt-color-brown-900);
-  margin: 0;
+.view-status {
+  margin-bottom: 0.5rem;
 }
 
 .view-subtitle {
   color: var(--salt-color-brown-600);
   font-size: 1.1rem;
   margin: 0;
+  font-weight: 500;
 }
 
 /* TILES */
 .stat-tiles {
   display: flex;
   gap: 1.5rem;
-  margin-bottom: 0.5rem;
+  margin-bottom: 1rem;
 }
 
 .stat-tile {
@@ -373,10 +404,15 @@ onMounted(fetchClients)
 .tile-label {
   font-size: 0.75rem;
   font-weight: 800;
-  color: var(--salt-color-brown-500);
   text-transform: uppercase;
   letter-spacing: 0.05em;
 }
+
+/* Tile Label Colors */
+.stat-tile.vh .tile-label { color: #991b1b; }
+.stat-tile.h .tile-label { color: #9a3412; }
+.stat-tile.m .tile-label { color: #854d0e; }
+.stat-tile.l .tile-label { color: #166534; }
 
 .tile-value {
   font-size: 1.75rem;
@@ -476,7 +512,9 @@ onMounted(fetchClients)
 
 @media (max-width: 768px) {
   .dashboard-layout { flex-direction: column; }
-  .sidebar { width: 100%; height: auto; position: relative; padding: 2rem 1.25rem; }
+  .sidebar { width: 100%; height: auto; position: relative; padding: 2rem 1.25rem; top: 0; }
   .main-dashboard { width: 100%; padding: 2rem 1.25rem; }
+  .main-header-bar { padding: 1rem 1.5rem; }
+  .main-title { font-size: 1.75rem; }
 }
 </style>
