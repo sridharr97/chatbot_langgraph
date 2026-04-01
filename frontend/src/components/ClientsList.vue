@@ -12,6 +12,7 @@ const summaryRef = ref(null)
 // Filters State
 const nameSearch = ref('')
 const selectedMonth = ref('')
+const selectedFlag = ref('') // Added flag filter
 
 const fetchClients = async () => {
   try {
@@ -23,6 +24,16 @@ const fetchClients = async () => {
   }
 }
 
+// Aggregated counts for the tiles
+const flagCounts = computed(() => {
+  const counts = { 'VH': 0, 'H': 0, 'M': 0, 'L': 0 }
+  clients.value.forEach(client => {
+    const f = (client.flag || '').toUpperCase()
+    if (f in counts) counts[f]++
+  })
+  return counts
+})
+
 // Computed property for filtered clients
 const filteredClients = computed(() => {
   return clients.value.filter(client => {
@@ -31,18 +42,18 @@ const filteredClients = computed(() => {
     
     const matchesMonth = !selectedMonth.value || 
       client.month === selectedMonth.value
+
+    const matchesFlag = !selectedFlag.value ||
+      (client.flag || '').toUpperCase() === selectedFlag.value.toUpperCase()
       
-    return matchesName && matchesMonth
+    return matchesName && matchesMonth && matchesFlag
   })
 })
 
 // Extract unique months from client data for the dropdown
 const uniqueMonths = computed(() => {
   const months = clients.value.map(c => c.month).filter(Boolean)
-  return [...new Set(months)].sort((a, b) => {
-    // Simple chronological sort if possible, otherwise alphabetical
-    return a.localeCompare(b)
-  })
+  return [...new Set(months)].sort((a, b) => a.localeCompare(b))
 })
 
 const handleRowClick = async (client) => {
@@ -70,6 +81,14 @@ const goBack = () => {
   currentView.value = 'dashboard'
   selectedClient.value = null
   htmlSummary.value = ''
+}
+
+const toggleFlagFilter = (flag) => {
+  if (selectedFlag.value === flag) {
+    selectedFlag.value = ''
+  } else {
+    selectedFlag.value = flag
+  }
 }
 
 const tableHeaders = computed(() => {
@@ -135,7 +154,7 @@ onMounted(fetchClients)
         </div>
 
         <div class="sidebar-footer">
-          <button @click="nameSearch = ''; selectedMonth = ''" class="reset-btn">
+          <button @click="nameSearch = ''; selectedMonth = ''; selectedFlag = ''" class="reset-btn">
             Clear Filters
           </button>
         </div>
@@ -147,6 +166,19 @@ onMounted(fetchClients)
           <h2 class="view-title">Dashboard</h2>
           <p class="view-subtitle">Showing {{ filteredClients.length }} records</p>
         </header>
+
+        <!-- CATEGORY TILES -->
+        <div class="stat-tiles">
+          <div 
+            v-for="(count, flag) in flagCounts" 
+            :key="flag"
+            :class="['stat-tile', getBadgeClass(flag), { active: selectedFlag === flag }]"
+            @click="toggleFlagFilter(flag)"
+          >
+            <span class="tile-label">{{ flag }}</span>
+            <span class="tile-value">{{ count }}</span>
+          </div>
+        </div>
 
         <div class="table-container">
           <table class="data-table">
@@ -186,7 +218,7 @@ onMounted(fetchClients)
       </main>
     </div>
 
-    <!-- SUMMARY VIEW (Full Page Overlay) -->
+    <!-- SUMMARY VIEW -->
     <div v-else class="view-container summary-page">
       <div class="navigation-bar">
         <button class="back-btn" @click="goBack">
@@ -214,13 +246,12 @@ onMounted(fetchClients)
   background-color: var(--salt-color-brown-100);
 }
 
-/* 2-Section Layout */
 .dashboard-layout {
   display: flex;
   min-height: 100vh;
 }
 
-/* SIDEBAR (20%) */
+/* SIDEBAR */
 .sidebar {
   width: 20%;
   background-color: var(--salt-color-white);
@@ -265,7 +296,6 @@ onMounted(fetchClients)
   background-color: var(--salt-color-brown-100);
   color: var(--salt-color-black);
   font-size: 0.9rem;
-  transition: all 0.2s;
 }
 
 .filter-input:focus, .filter-select:focus {
@@ -284,15 +314,9 @@ onMounted(fetchClients)
   font-size: 0.8rem;
   font-weight: 600;
   cursor: pointer;
-  transition: all 0.2s;
 }
 
-.reset-btn:hover {
-  background-color: var(--salt-color-brown-100);
-  color: var(--salt-color-brown-900);
-}
-
-/* MAIN CONTENT (80%) */
+/* MAIN CONTENT */
 .main-dashboard {
   width: 80%;
   padding: 3rem 3rem;
@@ -301,16 +325,11 @@ onMounted(fetchClients)
   gap: 2rem;
 }
 
-.view-header {
-  margin-bottom: 0.5rem;
-}
-
 .view-title {
   font-size: 2.5rem;
   font-weight: 800;
   color: var(--salt-color-brown-900);
-  margin: 0 0 0.5rem 0;
-  letter-spacing: -0.02em;
+  margin: 0;
 }
 
 .view-subtitle {
@@ -318,6 +337,63 @@ onMounted(fetchClients)
   font-size: 1.1rem;
   margin: 0;
 }
+
+/* TILES */
+.stat-tiles {
+  display: flex;
+  gap: 1.5rem;
+  margin-bottom: 0.5rem;
+}
+
+.stat-tile {
+  flex: 1;
+  background-color: var(--salt-color-white);
+  border: 1px solid var(--salt-color-brown-200);
+  border-radius: 0.75rem;
+  padding: 1.25rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  position: relative;
+}
+
+.stat-tile:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(46, 25, 5, 0.05);
+  border-color: var(--salt-color-brown-400);
+}
+
+.stat-tile.active {
+  border-color: var(--salt-color-brown-700);
+  box-shadow: inset 0 0 0 2px var(--salt-color-brown-700);
+}
+
+.tile-label {
+  font-size: 0.75rem;
+  font-weight: 800;
+  color: var(--salt-color-brown-500);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.tile-value {
+  font-size: 1.75rem;
+  font-weight: 800;
+  color: var(--salt-color-black);
+}
+
+/* Mild Tile Background Colors */
+.stat-tile.vh { background-color: #fef2f2; border-color: #fee2e2; }
+.stat-tile.h { background-color: #fffaf5; border-color: #ffedd5; }
+.stat-tile.m { background-color: #fefce8; border-color: #fef9c3; }
+.stat-tile.l { background-color: #f0fdf4; border-color: #dcfce7; }
+
+.stat-tile.vh:hover { border-color: #fca5a5; }
+.stat-tile.h:hover { border-color: #fdba74; }
+.stat-tile.m:hover { border-color: #fde047; }
+.stat-tile.l:hover { border-color: #86efac; }
 
 /* Table Styles */
 .table-container {
@@ -352,23 +428,9 @@ onMounted(fetchClients)
   white-space: nowrap;
 }
 
-.clickable-row {
-  cursor: pointer;
-  transition: background-color 0.2s;
-}
+.clickable-row:hover { background-color: var(--salt-color-brown-100); }
 
-.clickable-row:hover {
-  background-color: var(--salt-color-brown-100);
-}
-
-.no-results {
-  text-align: center;
-  padding: 3rem;
-  color: var(--salt-color-brown-400);
-  font-style: italic;
-}
-
-/* Badge Styles */
+/* Badges */
 .status-badge {
   padding: 0.25rem 0.625rem;
   border-radius: 4px;
@@ -404,23 +466,17 @@ onMounted(fetchClients)
   color: var(--salt-color-brown-600);
   font-weight: 600;
   cursor: pointer;
-  padding: 0.5rem 0;
 }
-.back-btn:hover { color: var(--salt-color-brown-900); }
 
 @media (max-width: 1200px) {
   .sidebar { width: 250px; }
   .main-dashboard { width: calc(100% - 250px); }
+  .stat-tiles { flex-wrap: wrap; }
 }
 
 @media (max-width: 768px) {
   .dashboard-layout { flex-direction: column; }
-  .sidebar { 
-    width: 100%; 
-    height: auto; 
-    position: relative; 
-    padding: 2rem 1.25rem;
-  }
+  .sidebar { width: 100%; height: auto; position: relative; padding: 2rem 1.25rem; }
   .main-dashboard { width: 100%; padding: 2rem 1.25rem; }
 }
 </style>
