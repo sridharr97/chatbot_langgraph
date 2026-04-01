@@ -26,7 +26,7 @@ const toggleChat = () => {
       class="chatbot-vertical-tab"
       aria-label="Toggle Chatbot"
     >
-      <span class="tab-text">Chatbot</span>
+      <span class="tab-text">Assistant</span>
     </button>
 
     <!-- Chatbot Drawer -->
