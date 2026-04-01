@@ -2,6 +2,7 @@
 import { ref } from 'vue'
 import ChatDrawer from './components/ChatDrawer.vue'
 import Chatbot from './components/Chatbot.vue'
+import ClientsList from './components/ClientsList.vue'
 
 const isChatOpen = ref(false)
 
@@ -14,8 +15,8 @@ const toggleChat = () => {
   <div class="main-app">
     <!-- Main Content Area (will be blurred when chat is open) -->
     <main :class="['main-content', { 'is-blurred': isChatOpen }]">
-      <div class="homepage-placeholder">
-        <!-- Content will be added here later -->
+      <div class="homepage-content">
+        <ClientsList />
       </div>
     </main>
 
@@ -69,7 +70,6 @@ body {
   position: relative;
   min-height: 100vh;
   width: 100vw;
-  overflow: hidden;
   background-color: var(--salt-color-brown-100);
 }
 
@@ -84,11 +84,10 @@ body {
   pointer-events: none;
 }
 
-.homepage-placeholder {
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  height: 100vh;
+.homepage-content {
+  width: 100%;
+  min-height: 100vh;
+  overflow-y: auto;
   background-color: var(--salt-color-brown-100);
 }
 

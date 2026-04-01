@@ -11,7 +11,7 @@ from concurrent.futures import ThreadPoolExecutor
 
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import StreamingResponse, FileResponse
+from fastapi.responses import StreamingResponse, FileResponse, HTMLResponse
 from pydantic import BaseModel
 from dotenv import load_dotenv
 
@@ -226,6 +226,43 @@ async def process_graph_stream(request: ChatRequest):
     finally:
         src_logger.removeHandler(status_handler)
         orch_logger.removeHandler(status_handler)
+
+@app.get("/clients")
+async def get_clients():
+    clients = []
+    # Path relative to backend/main.py
+    csv_path = os.path.join(os.path.dirname(__file__), "..", "src", "resources", "details.csv")
+    if not os.path.exists(csv_path):
+        logger.error(f"details.csv not found at {csv_path}")
+        raise HTTPException(status_code=404, detail="details.csv not found")
+    
+    try:
+        with open(csv_path, mode='r', encoding='utf-8') as f:
+            reader = csv.DictReader(f)
+            for row in reader:
+                clients.append(row)
+    except Exception as e:
+        logger.error(f"Error reading details.csv: {e}")
+        raise HTTPException(status_code=500, detail="Error reading client data")
+        
+    return clients
+
+@app.get("/client-summary/{client_id}")
+async def get_client_summary(client_id: str):
+    # Path relative to backend/main.py
+    html_path = os.path.join(os.path.dirname(__file__), "..", "src", "resources", f"{client_id}.html")
+    if not os.path.exists(html_path):
+        logger.error(f"Summary for {client_id} not found at {html_path}")
+        raise HTTPException(status_code=404, detail=f"Summary for {client_id} not found")
+    
+    try:
+        with open(html_path, mode='r', encoding='utf-8') as f:
+            html_content = f.read()
+    except Exception as e:
+        logger.error(f"Error reading {client_id}.html: {e}")
+        raise HTTPException(status_code=500, detail="Error reading summary content")
+        
+    return HTMLResponse(content=html_content)
 
 @app.post("/chat")
 async def chat_endpoint(request: ChatRequest):
