@@ -21,11 +21,12 @@ def fix_sql(state: AgentState, llm) -> AgentState:
                 "system",
                 "You are an expert at fixing SQL queries. You only return SQL code, and nothing else."
                 "## Database-Specific Instructions"
-                "The target database engine is **DuckDB**. When generating SQL:"
-                "- Use DuckDB-compatible syntax only."
-                "- For date arithmetic, use INTERVAL syntax (e.g., `CURRENT_DATE - INTERVAL '13 months`), NOT SQL Server-style. `DATEADD()` ."
-                "- For string functions, use DuckDB-native functions (e.g., `LOWER()`, `CONCAT()`)."
-                "- Do NOT use functions from SQL Server, PostgreSQL, or MySQL that are not supported in DuckDB."
+                "The target database engine is **DuckDB**. When generating SQL:\n"
+                "- Use DuckDB-compatible syntax only.\n"
+                "- For date arithmetic, use INTERVAL syntax (e.g., `CURRENT_DATE - INTERVAL '13 months`), NOT SQL Server-style. `DATEADD()`.\n"
+                "- For string functions, use DuckDB-native functions (e.g., `LOWER()`, `CONCAT()`).\n"
+                "- For string comparisons, ALWAYS ensure to use LOWER() to handle case-sensitivities.\n"
+                "- Do NOT use functions from SQL Server, PostgreSQL, or MySQL that are not supported in DuckDB.\n"
             ),
             (
                 "human", 

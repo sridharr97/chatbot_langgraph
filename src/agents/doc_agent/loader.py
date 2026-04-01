@@ -27,6 +27,7 @@ def load_docx(file_path: str) -> str:
                 row_text = [cell.text.strip() for cell in row.cells if cell.text.strip()]
                 if row_text:
                     full_text.append(" | ".join(row_text))  # Join cell texts with a separator
+                    full_text.append("\n" + "-" * 50 + "\n")  # Add a separator between two rows
 
         return "\n".join(full_text)
     except Exception as e:

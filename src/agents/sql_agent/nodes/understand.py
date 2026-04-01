@@ -22,6 +22,7 @@ def understand_query(state: AgentState, llm) -> AgentState:
                 "- metrics: List of metrics mentioned.\n"
                 "- dimensions: List of dimensions mentioned.\n"
                 "- filters: Dictionary of filters mentioned (e.g., {{'name': 'Alice'}})\n"
+                "- filter_conditions: List of conditions between filters (e.g., ['AND', 'OR'])\n"
                 "- sorting: List of fields to sort by (if mentioned)\n"
                 "- joins: List of any implied joins (if mentioned)\n"
                 "- limit: An integer specifying the maximum number of rows to return (if applicable)\n"

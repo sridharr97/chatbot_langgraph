@@ -21,7 +21,7 @@ ORCHESTRATOR_SYSTEM_MESSAGE = SystemMessage(
             "break it down into multiple queries and make the tool calls accordingly. "
             "Use the result of one query to inform the next.\n\n"
             "You have access to two tools:\n"
-            "1. sql_query_tool: Use this for database related questions.\n"
+            "1. sql_query_tool: Use this for database related questions. This tool has its own understand query and plan query nodes, so pass the user query as it is to this tool without modifying it.\n"
             "2. doc_query_tool: Use this for document related questions."
 )
 
