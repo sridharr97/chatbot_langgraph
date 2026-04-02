@@ -1,11 +1,21 @@
 <script setup>
+/**
+ * App.vue
+ * This is the root component of the application.
+ * It manages the overall layout, including the main content area,
+ * the vertical chatbot trigger, and the slide-out ChatDrawer.
+ */
 import { ref } from 'vue'
 import ChatDrawer from './components/ChatDrawer.vue'
 import Chatbot from './components/Chatbot.vue'
 import ClientsList from './components/ClientsList.vue'
 
-const isChatOpen = ref(false)
+// --- State Management ---
+const isChatOpen = ref(false) // Controls whether the chatbot drawer is visible
 
+/**
+ * Toggles the visibility of the chatbot drawer.
+ */
 const toggleChat = () => {
   isChatOpen.value = !isChatOpen.value
 }
@@ -13,14 +23,22 @@ const toggleChat = () => {
 
 <template>
   <div class="main-app">
-    <!-- Main Content Area (will be blurred when chat is open) -->
+    <!-- 
+      Main Content Area: 
+      Displays the Dashboard (ClientsList).
+      When the chatbot is open, this area gets blurred and disabled for interaction.
+    -->
     <main :class="['main-content', { 'is-blurred': isChatOpen }]">
       <div class="homepage-content">
         <ClientsList />
       </div>
     </main>
 
-    <!-- Vertical Chatbot Button -->
+    <!-- 
+      Vertical Chatbot Button:
+      Fixed to the right side of the screen. 
+      Clicking it opens the slide-out drawer.
+    -->
     <button 
       @click="toggleChat" 
       class="chatbot-vertical-tab"
@@ -29,7 +47,11 @@ const toggleChat = () => {
       <span class="tab-text">Assistant</span>
     </button>
 
-    <!-- Chatbot Drawer -->
+    <!-- 
+      Chatbot Drawer:
+      Slide-out panel containing the actual Chatbot interface.
+      Uses v-show internally to keep the chatbot state alive even when closed.
+    -->
     <ChatDrawer :isOpen="isChatOpen" @close="isChatOpen = false">
       <Chatbot />
     </ChatDrawer>
@@ -37,11 +59,13 @@ const toggleChat = () => {
 </template>
 
 <style>
+/* --- Global Styles --- */
+
 :root {
   font-family: Inter, system-ui, Avenir, Helvetica, Arial, sans-serif;
   line-height: 1.5;
   
-  /* Permitted Color Palette */
+  /* Permitted Color Palette (Salt Theme) */
   --salt-color-white: rgb(255, 255, 255);
   --salt-color-black: rgb(0, 0, 0);
   --salt-color-brown-100: rgb(243, 238, 232);
@@ -60,12 +84,14 @@ const toggleChat = () => {
 
 body {
   margin: 0;
-  overflow-x: hidden;
+  overflow-x: hidden; /* Prevent horizontal scroll on body */
   color: var(--salt-color-black);
 }
 </style>
 
 <style scoped>
+/* --- Component Specific Styles --- */
+
 .main-app {
   position: relative;
   min-height: 100vh;
@@ -76,12 +102,13 @@ body {
 .main-content {
   min-height: 100vh;
   width: 100%;
-  transition: filter 0.3s ease-in-out;
+  transition: filter 0.3s ease-in-out; /* Smooth blur transition */
 }
 
+/* Blurring effect for the dashboard when drawer is open */
 .main-content.is-blurred {
   filter: blur(8px);
-  pointer-events: none;
+  pointer-events: none; /* Disables clicking on background while drawer is active */
 }
 
 .homepage-content {
@@ -91,6 +118,7 @@ body {
   background-color: var(--salt-color-brown-100);
 }
 
+/* Vertical Tab Styling (Right Side) */
 .chatbot-vertical-tab {
   position: fixed;
   right: 0;
@@ -112,7 +140,7 @@ body {
 
 .chatbot-vertical-tab:hover {
   background-color: var(--salt-color-brown-800);
-  padding-right: 0.875rem;
+  padding-right: 0.875rem; /* Slight expansion on hover */
 }
 
 .tab-text {
@@ -122,6 +150,6 @@ body {
   font-size: 0.9rem;
   letter-spacing: 0.1em;
   text-transform: uppercase;
-  transform: rotate(180deg);
+  transform: rotate(180deg); /* Flip text orientation */
 }
 </style>

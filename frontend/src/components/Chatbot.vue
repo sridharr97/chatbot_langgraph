@@ -1,6 +1,16 @@
 <script setup>
+/**
+ * Chatbot.vue
+ * 
+ * This is a specialized database assistant component. It handles:
+ * 1. Newline-delimited JSON (NDJSON) streaming from the backend.
+ * 2. Multi-tabbed responses (Answer, Output Data, SQL Query).
+ * 3. Real-time status updates (showing which "Node" or "Tool" is running).
+ * 4. Automatic scrolling and session management.
+ */
 import { ref, onMounted, nextTick, watch } from 'vue'
 
+// --- State Management ---
 const messages = ref([
   { 
     role: 'assistant', 
@@ -10,15 +20,18 @@ const messages = ref([
     isComplete: true
   }
 ])
-const input = ref('')
-const isLoading = ref(false)
-const currentStatusTool = ref('')
-const currentStatusNode = ref('')
-const messagesEndRef = ref(null)
-const sessionThreadId = ref('')
-let abortController = null
+const input = ref('')                // Bound to the chat input textarea
+const isLoading = ref(false)         // True while the backend is processing
+const currentStatusTool = ref('')    // Stores current high-level tool status (e.g., "Calling SQL Tool")
+const currentStatusNode = ref('')    // Stores fine-grained node status (e.g., "Processing: Generate_SQL")
+const messagesEndRef = ref(null)     // Used for auto-scrolling
+const sessionThreadId = ref('')      // Unique ID to maintain conversation context on backend
+let abortController = null           // Allows users to cancel a running process
 
-// Generate a unique thread ID for this browser session/refresh
+/**
+ * Generates a unique thread ID for the current session.
+ * Memory is cleared on page refresh, starting a fresh conversation.
+ */
 const generateThreadId = () => {
   return 'thread_' + Date.now() + '_' + Math.random().toString(36).substring(2, 9)
 }
@@ -28,6 +41,9 @@ onMounted(() => {
   console.log('Session initialized with thread ID:', sessionThreadId.value)
 })
 
+/**
+ * Smoothly scrolls the message area to the bottom.
+ */
 const scrollToBottom = async () => {
   await nextTick()
   if (messagesEndRef.value) {
@@ -35,12 +51,16 @@ const scrollToBottom = async () => {
   }
 }
 
+// Automatically scroll whenever a new message is added
 watch(messages, (newVal, oldVal) => {
   if (newVal.length > oldVal.length) {
     scrollToBottom()
   }
 }, { deep: true })
 
+/**
+ * Utility to copy text (SQL or answers) to the user's clipboard.
+ */
 const copyToClipboard = (text) => {
   navigator.clipboard.writeText(text).then(() => {
     console.log('Copied to clipboard');
@@ -49,6 +69,9 @@ const copyToClipboard = (text) => {
   });
 }
 
+/**
+ * Formats values for the data table (handles dates and numbers).
+ */
 const formatValue = (value) => {
   if (value === null || value === undefined) return '-'
   if (typeof value === 'string' && /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}/.test(value)) {
@@ -63,6 +86,9 @@ const formatValue = (value) => {
   return value
 }
 
+/**
+ * Cancels the current request using AbortController.
+ */
 const handleStopProcess = () => {
   if (abortController) {
     abortController.abort()
@@ -79,6 +105,9 @@ const handleStopProcess = () => {
   }
 }
 
+/**
+ * Handles 'Enter' key behavior in the textarea.
+ */
 const handleKeydown = (e) => {
   if (e.key === 'Enter' && !e.shiftKey) {
     e.preventDefault()
@@ -86,9 +115,14 @@ const handleKeydown = (e) => {
   }
 }
 
+/**
+ * The main communication function. 
+ * Sends user input to /api/chat and parses the structured stream.
+ */
 const handleSendMessage = async () => {
   if (!input.value.trim() || isLoading.value) return
 
+  // 1. Capture input and reset state
   const userMessage = { role: 'user', content: input.value }
   messages.value.push(userMessage)
   
@@ -100,15 +134,16 @@ const handleSendMessage = async () => {
   
   abortController = new AbortController()
 
+  // 2. Create a placeholder message for the Assistant
   const assistantMessageId = Date.now()
   const newMessage = { 
     id: assistantMessageId,
     role: 'assistant', 
-    outputData: [],
-    sqlQuery: '',
-    content: '', 
+    outputData: [],      // Will store table data if found
+    sqlQuery: '',        // Will store generated SQL if found
+    content: '',         // Will store final text answer
     isComplete: false,
-    activeTab: 'answer',
+    activeTab: 'answer', // Default tab
     hasAutoSwitched: false
   }
   messages.value.push(newMessage)
@@ -116,9 +151,7 @@ const handleSendMessage = async () => {
   try {
     const response = await fetch('/api/chat', {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
+      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ 
         message: currentInput,
         thread_id: sessionThreadId.value
@@ -130,7 +163,7 @@ const handleSendMessage = async () => {
 
     const reader = response.body.getReader()
     const decoder = new TextDecoder()
-    let buffer = ''
+    let buffer = '' // Accumulates chunks until a full newline is found
 
     while (true) {
       const { done, value } = await reader.read()
@@ -138,18 +171,21 @@ const handleSendMessage = async () => {
 
       buffer += decoder.decode(value, { stream: true })
       const lines = buffer.split('\n')
-      buffer = lines.pop() || '' 
+      buffer = lines.pop() || '' // Keep partial line in buffer
 
       for (const line of lines) {
         if (!line.trim()) continue
         try {
+          // IMPORTANT: Each line is a JSON object defining a specific data type
           const data = JSON.parse(line)
           
           const msgIndex = messages.value.findIndex(m => m.id === assistantMessageId)
           if (msgIndex !== -1) {
             const msg = messages.value[msgIndex]
             
+            // Map JSON keys to UI state
             if (data.type === 'status') {
+              // Updates the 'Thinking...' text with real steps
               const status = data.content
               if (status.includes('Calling SQL QA Tool')) {
                 currentStatusTool.value = status
@@ -160,12 +196,17 @@ const handleSendMessage = async () => {
                 currentStatusTool.value = status
               }
             } else if (data.type === 'data') {
+              // Stores raw data for the 'Output Data' tab
               msg.outputData = data.content
             } else if (data.type === 'query') {
+              // Stores SQL string for the 'SQL Query' tab
               msg.sqlQuery = data.content
             } else if (data.type === 'result') {
+              // The final text answer
               msg.content = data.content
               msg.isComplete = true
+              
+              // Logic to auto-switch tabs if the result is very large
               if (!msg.hasAutoSwitched) {
                 const isLargeResult = msg.content.includes("more than 100 records");
                 if (isLargeResult) msg.activeTab = 'data';
@@ -210,8 +251,11 @@ const handleSendMessage = async () => {
     </header>
 
     <main class="messages-area">
+      <!-- Loop through all conversation messages -->
       <div v-for="(msg, index) in messages" :key="index" :class="['message-wrapper', msg.role]">
         <div :class="['message-bubble', msg.role]">
+          
+          <!-- USER MESSAGE UI -->
           <template v-if="msg.role === 'user'">
             <div class="user-message-content">
               <p class="content-text">{{ msg.content }}</p>
@@ -221,27 +265,36 @@ const handleSendMessage = async () => {
             </div>
           </template>
 
+          <!-- ASSISTANT MESSAGE UI -->
           <template v-else>
             <div class="assistant-content">
+              <!-- Static Welcome Message -->
               <div v-if="!msg.id">
                 <p class="content-text">{{ msg.content }}</p>
               </div>
 
+              <!-- Multi-tab Assistant Response -->
               <div v-else class="tabbed-container">
+                <!-- Navigation Tabs -->
                 <div class="tabs-header">
                   <button @click="msg.activeTab = 'answer'" :class="{ active: msg.activeTab === 'answer' }" class="tab-btn">Answer</button>
                   <button @click="msg.activeTab = 'data'" :class="{ active: msg.activeTab === 'data' }" class="tab-btn" v-if="msg.outputData && msg.outputData.length > 0">Output Data</button>
                   <button @click="msg.activeTab = 'query'" :class="{ active: msg.activeTab === 'query' }" class="tab-btn" v-if="msg.sqlQuery">SQL Query</button>
                 </div>
                 
+                <!-- Tab Panels -->
                 <div class="tab-content">
+                  
+                  <!-- PANEL 1: Text Answer & Thinking Animation -->
                   <div v-if="msg.activeTab === 'answer'" class="output-container">
+                    <!-- Final Answer -->
                     <div v-if="msg.content" class="answer-with-copy">
                       <p class="content-text">{{ msg.content }}</p>
                       <button class="copy-icon-btn inline" @click="copyToClipboard(msg.content)" title="Copy Answer">
                         <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>
                       </button>
                     </div>
+                    <!-- Thinking State -->
                     <div v-else class="processing-placeholder">
                       <div class="bounce-dots"><span>.</span><span>.</span><span>.</span></div>
                       <div class="status-stack">
@@ -251,6 +304,7 @@ const handleSendMessage = async () => {
                     </div>
                   </div>
 
+                  <!-- PANEL 2: Interactive Data Table -->
                   <div v-else-if="msg.activeTab === 'data'" class="data-container">
                     <div class="data-actions">
                         <a href="/api/download" download="query_result.csv" class="download-btn">Download CSV</a>
@@ -264,6 +318,7 @@ const handleSendMessage = async () => {
                     <div v-else class="no-data">No data available.</div>
                   </div>
 
+                  <!-- PANEL 3: Generated SQL Query -->
                   <div v-else-if="msg.activeTab === 'query'" class="query-container">
                     <div class="sql-wrapper">
                       <pre><code>{{ msg.sqlQuery }}</code></pre>
@@ -278,6 +333,7 @@ const handleSendMessage = async () => {
           </template>
         </div>
       </div>
+      <!-- Dummy div to help scrolling to the very bottom -->
       <div ref="messagesEndRef"></div>
     </main>
 
@@ -292,6 +348,7 @@ const handleSendMessage = async () => {
             :disabled="isLoading"
             rows="1"
           ></textarea>
+          <!-- Stop Process Button (only visible during loading) -->
           <button
             v-if="isLoading"
             type="button"
@@ -315,6 +372,8 @@ const handleSendMessage = async () => {
 </template>
 
 <style scoped>
+/* --- Component Layout --- */
+
 .chatbot-container {
   display: flex;
   flex-direction: column;
@@ -346,6 +405,8 @@ const handleSendMessage = async () => {
   flex-direction: column;
   gap: 1.25rem;
 }
+
+/* --- Message Bubbles --- */
 
 .message-wrapper {
   display: flex;
@@ -415,6 +476,8 @@ const handleSendMessage = async () => {
   right: 0.5rem;
 }
 
+/* --- Status/Thinking Indicators --- */
+
 .status-stack {
   display: flex;
   flex-direction: column;
@@ -431,6 +494,8 @@ const handleSendMessage = async () => {
   color: var(--salt-color-brown-500);
   font-style: italic;
 }
+
+/* --- Input Area --- */
 
 .footer {
   background: var(--salt-color-white);
@@ -505,7 +570,7 @@ const handleSendMessage = async () => {
   cursor: not-allowed;
 }
 
-/* Tabbed Container Styles */
+/* --- Tabbed Container Styles --- */
 .tabbed-container { display: flex; flex-direction: column; }
 .tabs-header {
   display: flex;
@@ -558,7 +623,7 @@ const handleSendMessage = async () => {
   40% { transform: scale(1.0); }
 }
 
-/* Data Table Styles */
+/* --- Data Table Styles --- */
 .data-container { display: flex; flex-direction: column; gap: 1rem; }
 .data-actions { display: flex; justify-content: flex-end; }
 .download-btn {
@@ -596,7 +661,7 @@ th {
   z-index: 10;
 }
 
-/* SQL Query Styles */
+/* --- SQL Query Styles --- */
 .sql-wrapper {
   position: relative;
   background-color: var(--salt-color-black);

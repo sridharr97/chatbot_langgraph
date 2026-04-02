@@ -1,39 +1,50 @@
 <script setup>
+/**
+ * ClientSummaryViewer.vue
+ * This component renders the detailed HTML summary for a specific client.
+ * It's displayed in a full-page view when a row is clicked in the dashboard.
+ */
 defineProps({
   htmlContent: {
     type: String,
-    required: true
+    default: '' // The raw HTML content from the backend
   },
   clientName: {
     type: String,
-    default: 'Client'
+    default: '' // The name of the client to display in the header
   },
   isLoading: {
     type: Boolean,
-    default: false
+    default: false // Show a loading spinner while fetching the content
   }
 })
 
+// Emit event to return to the dashboard view
 defineEmits(['close'])
 </script>
 
 <template>
   <div class="summary-viewer">
-    <div class="summary-header">
-      <h3 class="summary-title">Summary: {{ clientName }}</h3>
-      <button class="close-btn" @click="$emit('close')" aria-label="Close Summary">
-        <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
-      </button>
-    </div>
+    <!-- Header: Shows the client name -->
+    <header class="summary-header">
+      <div class="header-main">
+        <h2 class="client-name">{{ clientName }}</h2>
+        <span class="view-tag">Full Analysis</span>
+      </div>
+    </header>
 
-    <div class="summary-content-wrapper">
+    <!-- Content Area -->
+    <div class="summary-body">
+      <!-- Loading State -->
       <div v-if="isLoading" class="loading-state">
         <div class="spinner"></div>
-        <p>Fetching details...</p>
+        <p>Generating summary analysis...</p>
       </div>
+
+      <!-- Rendered HTML Content -->
       <div 
         v-else 
-        class="html-container" 
+        class="html-content" 
         v-html="htmlContent"
       ></div>
     </div>
@@ -41,68 +52,79 @@ defineEmits(['close'])
 </template>
 
 <style scoped>
-.summary-viewer {
-  background: var(--salt-color-white);
-  border-radius: 1rem;
-  box-shadow: 0 20px 25px -5px rgba(46, 25, 5, 0.1), 0 10px 10px -5px rgba(46, 25, 5, 0.04);
-  border: 1px solid var(--salt-color-brown-200);
-  overflow: hidden;
-  display: flex;
-  flex-direction: column;
-  animation: slideUp 0.4s cubic-bezier(0.16, 1, 0.3, 1);
-}
+/* --- Component Styles --- */
 
-@keyframes slideUp {
-  from { opacity: 0; transform: translateY(20px); }
-  to { opacity: 1; transform: translateY(0); }
+.summary-viewer {
+  background-color: var(--salt-color-white);
+  border-radius: 1rem;
+  border: 1px solid var(--salt-color-brown-200);
+  box-shadow: 0 10px 30px rgba(46, 25, 5, 0.08);
+  overflow: hidden;
+  min-height: 600px;
 }
 
 .summary-header {
-  padding: 1rem 1.5rem;
+  padding: 2rem;
   background-color: var(--salt-color-brown-100);
   border-bottom: 1px solid var(--salt-color-brown-200);
+}
+
+.header-main {
   display: flex;
+  align-items: center;
   justify-content: space-between;
-  align-items: center;
 }
 
-.summary-title {
-  margin: 0;
-  font-size: 1.1rem;
-  font-weight: 700;
+.client-name {
+  font-size: 2rem;
+  font-weight: 800;
   color: var(--salt-color-brown-900);
+  margin: 0;
 }
 
-.close-btn {
-  background: none;
-  border: none;
-  color: var(--salt-color-brown-500);
-  cursor: pointer;
-  padding: 0.5rem;
-  border-radius: 0.5rem;
-  transition: all 0.2s;
-  display: flex;
-  align-items: center;
-  justify-content: center;
+.view-tag {
+  background-color: var(--salt-color-brown-700);
+  color: var(--salt-color-white);
+  padding: 0.25rem 0.75rem;
+  border-radius: 2rem;
+  font-size: 0.75rem;
+  font-weight: 700;
+  text-transform: uppercase;
 }
 
-.close-btn:hover {
-  background-color: var(--salt-color-brown-200);
-  color: var(--salt-color-brown-800);
+.summary-body {
+  padding: 2.5rem;
+  color: var(--salt-color-black);
+  line-height: 1.6;
 }
 
-.summary-content-wrapper {
-  padding: 2rem;
-  min-height: 200px;
+/* Styles for the injected HTML content from backend */
+:deep(.html-content) {
+  font-size: 1.05rem;
 }
 
+:deep(.html-content h1, .html-content h2, .html-content h3) {
+  color: var(--salt-color-brown-900);
+  margin-top: 2rem;
+  margin-bottom: 1rem;
+}
+
+:deep(.html-content p) { margin-bottom: 1.25rem; }
+
+:deep(.html-content ul, .html-content ol) {
+  margin-bottom: 1.5rem;
+  padding-left: 1.5rem;
+}
+
+:deep(.html-content li) { margin-bottom: 0.5rem; }
+
+/* Loading Spinner */
 .loading-state {
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  height: 200px;
-  gap: 1rem;
+  padding: 5rem 0;
   color: var(--salt-color-brown-500);
 }
 
@@ -110,28 +132,13 @@ defineEmits(['close'])
   width: 40px;
   height: 40px;
   border: 3px solid var(--salt-color-brown-100);
-  border-top-color: var(--salt-color-brown-600);
+  border-top-color: var(--salt-color-brown-700);
   border-radius: 50%;
   animation: spin 1s linear infinite;
+  margin-bottom: 1rem;
 }
 
 @keyframes spin {
   to { transform: rotate(360deg); }
-}
-
-.html-container {
-  color: var(--salt-color-black);
-  line-height: 1.6;
-}
-
-/* Ensure injected HTML looks okay */
-:deep(h1), :deep(h2), :deep(h3) {
-  color: var(--salt-color-brown-900);
-  margin-top: 1.5rem;
-  margin-bottom: 0.75rem;
-}
-
-:deep(p) {
-  margin-bottom: 1rem;
 }
 </style>

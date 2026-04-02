@@ -1,19 +1,29 @@
 <script setup>
+/**
+ * ClientsList.vue
+ * This component displays the main Dashboard with a list of clients in a table.
+ * It includes a sidebar for filtering by name and month, and top summary tiles
+ * for filtering by risk category (flagg).
+ */
 import { ref, onMounted, nextTick, computed } from 'vue'
 import ClientSummaryViewer from './ClientSummaryViewer.vue'
 
-const clients = ref([])
-const selectedClient = ref(null)
-const htmlSummary = ref('')
-const currentView = ref('dashboard') // 'dashboard' or 'summary'
-const isLoadingSummary = ref(false)
-const summaryRef = ref(null)
+// --- State Management ---
+const clients = ref([])               // Full list of clients from backend
+const selectedClient = ref(null)       // The client currently selected for the summary view
+const htmlSummary = ref('')            // The HTML content of the client summary
+const currentView = ref('dashboard')   // Tracks if we are in 'dashboard' or 'summary' view
+const isLoadingSummary = ref(false)    // Loading state for fetching HTML summaries
+const summaryRef = ref(null)           // Reference to the summary section DOM element
 
-// Filters State
-const nameSearch = ref('')
-const selectedMonth = ref('')
-const selectedFlag = ref('') // Added flag filter
+// --- Filter State ---
+const nameSearch = ref('')             // Bound to the Name search input
+const selectedMonth = ref('')          // Bound to the Month dropdown
+const selectedFlag = ref('')           // Bound to the interactive Risk tiles (flagg)
 
+/**
+ * Fetch all clients from the API on component mount.
+ */
 const fetchClients = async () => {
   try {
     const response = await fetch('/api/clients')
@@ -24,38 +34,54 @@ const fetchClients = async () => {
   }
 }
 
-// Aggregated counts for the tiles
+/**
+ * Aggregated counts for the risk tiles (VH, H, M, L).
+ * Uses the 'flagg' field from the data.
+ */
 const flagCounts = computed(() => {
   const counts = { 'VH': 0, 'H': 0, 'M': 0, 'L': 0 }
   clients.value.forEach(client => {
-    const f = (client.flag || '').toUpperCase()
+    // Note: 'flag' updated to 'flagg'
+    const f = (client.flagg || '').toUpperCase()
     if (f in counts) counts[f]++
   })
   return counts
 })
 
-// Computed property for filtered clients
+/**
+ * Main logic for filtering the clients list.
+ * Combines Name search, Month selection, and Risk tile selection.
+ */
 const filteredClients = computed(() => {
   return clients.value.filter(client => {
+    // Name filter (uses 'namee' field)
     const matchesName = !nameSearch.value || 
-      (client.name && client.name.toLowerCase().includes(nameSearch.value.toLowerCase()))
+      (client.namee && client.namee.toLowerCase().includes(nameSearch.value.toLowerCase()))
     
+    // Month filter
     const matchesMonth = !selectedMonth.value || 
       client.month === selectedMonth.value
 
+    // Risk category filter (uses 'flagg' field)
     const matchesFlag = !selectedFlag.value ||
-      (client.flag || '').toUpperCase() === selectedFlag.value.toUpperCase()
+      (client.flagg || '').toUpperCase() === selectedFlag.value.toUpperCase()
       
     return matchesName && matchesMonth && matchesFlag
   })
 })
 
-// Extract unique months from client data for the dropdown
+/**
+ * Extracts unique months from the dataset for the dropdown filter.
+ */
 const uniqueMonths = computed(() => {
   const months = clients.value.map(c => c.month).filter(Boolean)
   return [...new Set(months)].sort((a, b) => a.localeCompare(b))
 })
 
+/**
+ * Called when a row in the table is clicked.
+ * Fetches the HTML summary for the specific client using 'html_id'.
+ */
 const handleRowClick = async (client) => {
   selectedClient.value = client
   currentView.value = 'summary'
@@ -63,10 +89,11 @@ const handleRowClick = async (client) => {
   htmlSummary.value = ''
 
   try {
-    const response = await fetch(`/api/client-summary/${client.id}`)
+    const response = await fetch(`/api/client-summary/${client.html_id}`)
     if (!response.ok) throw new Error('Failed to fetch summary')
     htmlSummary.value = await response.text()
     
+    // Scroll to top of the page when the summary view opens
     await nextTick()
     window.scrollTo({ top: 0, behavior: 'smooth' })
   } catch (err) {
@@ -77,30 +104,48 @@ const handleRowClick = async (client) => {
   }
 }
 
+/**
+ * Switches view back to the main dashboard.
+ */
 const goBack = () => {
   currentView.value = 'dashboard'
   selectedClient.value = null
   htmlSummary.value = ''
 }
 
+/**
+ * Toggles the filter for a specific risk category tile.
+ */
 const toggleFlagFilter = (flag) => {
   if (selectedFlag.value === flag) {
-    selectedFlag.value = ''
+    selectedFlag.value = '' // Unselect if already selected
   } else {
     selectedFlag.value = flag
   }
 }
 
+/**
+ * Dynamically determines table headers based on the first client object.
+ * Excludes the 'html_id' field from display.
+ */
 const tableHeaders = computed(() => {
   if (clients.value.length === 0) return []
-  return Object.keys(clients.value[0]).filter(key => key.toLowerCase() !== 'id')
+  // Note: Exclude 'html_id' from table columns
+  return Object.keys(clients.value[0]).filter(key => key.toLowerCase() !== 'html_id')
 })
 
+/**
+ * Helper to get a display name for a client.
+ */
 const getDisplayName = (client) => {
   if (!client) return ''
-  return client.name || client.id
+  // Note: 'name' updated to 'namee'
+  return client.namee || client.html_id
 }
 
+/**
+ * Maps risk categories (VH, H, M, L) to CSS classes for badges and tiles.
+ */
 const getBadgeClass = (value) => {
   if (!value) return ''
   const val = String(value).toLowerCase()
@@ -111,25 +156,28 @@ const getBadgeClass = (value) => {
   return ''
 }
 
+// Fetch data when the component is ready
 onMounted(fetchClients)
 </script>
 
 <template>
   <div class="dashboard-wrapper">
-    <!-- DASHBOARD VIEW -->
-    <div v-if="currentView === 'dashboard'" class="dashboard-view-container">
-      <!-- FULL-WIDTH MAIN HEADER BAR -->
-      <header class="main-header-bar">
-        <h1 class="main-title">Dashboard</h1>
-      </header>
+    <!-- FULL-WIDTH MAIN HEADER BAR (Always Visible) -->
+    <header class="main-header-bar">
+      <h1 class="main-title">Dashboard</h1>
+    </header>
 
+    <!-- --- DASHBOARD VIEW --- -->
+    <div v-if="currentView === 'dashboard'" class="dashboard-view-container">
       <div class="dashboard-layout">
-        <!-- SIDEBAR (20%) - Starts below header -->
+        
+        <!-- SIDEBAR (20% width) - Contains filters -->
         <aside class="sidebar">
           <div class="sidebar-header">
             <h3 class="sidebar-title">Filters</h3>
           </div>
           
+          <!-- Name Search Input -->
           <div class="filter-group">
             <label for="name-search" class="filter-label">Search Name</label>
             <div class="input-wrapper">
@@ -143,6 +191,7 @@ onMounted(fetchClients)
             </div>
           </div>
 
+          <!-- Month Dropdown Filter -->
           <div class="filter-group">
             <label for="month-filter" class="filter-label">Select Month</label>
             <div class="input-wrapper">
@@ -159,6 +208,7 @@ onMounted(fetchClients)
             </div>
           </div>
 
+          <!-- Clear All Filters Button -->
           <div class="sidebar-footer">
             <button @click="nameSearch = ''; selectedMonth = ''; selectedFlag = ''" class="reset-btn">
               Clear Filters
@@ -166,13 +216,15 @@ onMounted(fetchClients)
           </div>
         </aside>
 
-        <!-- MAIN CONTENT (80%) -->
+        <!-- MAIN DASHBOARD CONTENT (80% width) -->
         <main class="main-dashboard">
+          
+          <!-- Result Count Information -->
           <div class="view-status">
             <p class="view-subtitle">Showing {{ filteredClients.length }} records</p>
           </div>
 
-          <!-- CATEGORY TILES -->
+          <!-- INTERACTIVE CATEGORY TILES (Risk Summary) -->
           <div class="stat-tiles">
             <div 
               v-for="(count, flag) in flagCounts" 
@@ -185,6 +237,7 @@ onMounted(fetchClients)
             </div>
           </div>
 
+          <!-- DATA TABLE -->
           <div class="table-container">
             <table class="data-table">
               <thead>
@@ -197,21 +250,24 @@ onMounted(fetchClients)
               <tbody>
                 <tr 
                   v-for="client in filteredClients" 
-                  :key="client.id" 
+                  :key="client.html_id" 
                   @click="handleRowClick(client)"
                   class="clickable-row"
                 >
                   <td v-for="header in tableHeaders" :key="header">
-                    <template v-if="header === 'flag'">
+                    <!-- Custom rendering for the 'flagg' column to show badges -->
+                    <template v-if="header === 'flagg'">
                       <span :class="['status-badge', getBadgeClass(client[header])]">
                         {{ client[header] }}
                       </span>
                     </template>
+                    <!-- Default rendering for other columns -->
                     <template v-else>
                       {{ client[header] }}
                     </template>
                   </td>
                 </tr>
+                <!-- No Results State -->
                 <tr v-if="filteredClients.length === 0">
                   <td :colspan="tableHeaders.length" class="no-results">
                     No matching records found.
@@ -224,8 +280,9 @@ onMounted(fetchClients)
       </div>
     </div>
 
-    <!-- SUMMARY VIEW -->
+    <!-- --- SUMMARY VIEW --- (Full Page) -->
     <div v-else class="view-container summary-page">
+      <!-- Top Navigation with Back Button -->
       <div class="navigation-bar">
         <button class="back-btn" @click="goBack">
           <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="19" y1="12" x2="5" y2="12"></line><polyline points="12 19 5 12 12 5"></polyline></svg>
@@ -233,6 +290,7 @@ onMounted(fetchClients)
         </button>
       </div>
 
+      <!-- Component to render the detailed HTML summary -->
       <section ref="summaryRef" class="summary-section">
         <ClientSummaryViewer
           :htmlContent="htmlSummary"
@@ -246,6 +304,8 @@ onMounted(fetchClients)
 </template>
 
 <style scoped>
+/* --- Layout Styles --- */
+
 .dashboard-wrapper {
   width: 100%;
   min-height: 100vh;
@@ -255,13 +315,13 @@ onMounted(fetchClients)
 .dashboard-view-container {
   display: flex;
   flex-direction: column;
-  min-height: 100vh;
+  min-height: calc(100vh - 85px); /* Full height minus header */
 }
 
 /* FULL-WIDTH MAIN HEADER BAR */
 .main-header-bar {
   width: 100%;
-  background-color: var(--salt-color-brown-200);
+  background-color: var(--salt-color-brown-200); /* Slightly darker shade for the header */
   padding: 1.5rem 3rem;
   border-bottom: 1px solid var(--salt-color-brown-300);
   box-sizing: border-box;
@@ -283,7 +343,7 @@ onMounted(fetchClients)
   flex: 1;
 }
 
-/* SIDEBAR - Starts below header */
+/* SIDEBAR STYLING */
 .sidebar {
   width: 20%;
   background-color: var(--salt-color-white);
@@ -293,7 +353,7 @@ onMounted(fetchClients)
   flex-direction: column;
   gap: 2rem;
   position: sticky;
-  top: 85px; /* Adjust based on header height */
+  top: 85px; /* Fixed height of the header */
   height: calc(100vh - 85px);
   box-sizing: border-box;
 }
@@ -349,7 +409,7 @@ onMounted(fetchClients)
   cursor: pointer;
 }
 
-/* MAIN CONTENT */
+/* MAIN CONTENT STYLING */
 .main-dashboard {
   width: 80%;
   padding: 2rem 3rem 3rem 3rem;
@@ -369,7 +429,7 @@ onMounted(fetchClients)
   font-weight: 500;
 }
 
-/* TILES */
+/* SUMMARY TILES STYLING */
 .stat-tiles {
   display: flex;
   gap: 1.5rem;
@@ -408,7 +468,7 @@ onMounted(fetchClients)
   letter-spacing: 0.05em;
 }
 
-/* Tile Label Colors */
+/* Risk-specific colors for tiles */
 .stat-tile.vh .tile-label { color: #991b1b; }
 .stat-tile.h .tile-label { color: #9a3412; }
 .stat-tile.m .tile-label { color: #854d0e; }
@@ -420,7 +480,7 @@ onMounted(fetchClients)
   color: var(--salt-color-black);
 }
 
-/* Mild Tile Background Colors */
+/* Mild Tile Background Colors based on risk level */
 .stat-tile.vh { background-color: #fef2f2; border-color: #fee2e2; }
 .stat-tile.h { background-color: #fffaf5; border-color: #ffedd5; }
 .stat-tile.m { background-color: #fefce8; border-color: #fef9c3; }
@@ -431,7 +491,7 @@ onMounted(fetchClients)
 .stat-tile.m:hover { border-color: #fde047; }
 .stat-tile.l:hover { border-color: #86efac; }
 
-/* Table Styles */
+/* DATA TABLE STYLING */
 .table-container {
   background: var(--salt-color-white);
   border-radius: 0.75rem;
@@ -466,7 +526,7 @@ onMounted(fetchClients)
 
 .clickable-row:hover { background-color: var(--salt-color-brown-100); }
 
-/* Badges */
+/* STATUS BADGES (Table) */
 .status-badge {
   padding: 0.25rem 0.625rem;
   border-radius: 4px;
@@ -482,7 +542,7 @@ onMounted(fetchClients)
 .status-badge.m { background-color: #fef9c3; color: #854d0e; }
 .status-badge.l { background-color: #f0fdf4; color: #166534; }
 
-/* SUMMARY VIEW PAGE */
+/* SUMMARY VIEW STYLING */
 .view-container.summary-page {
   max-width: 1200px;
   margin: 0 auto;
@@ -490,6 +550,7 @@ onMounted(fetchClients)
   display: flex;
   flex-direction: column;
   gap: 2rem;
+  min-height: calc(100vh - 85px);
 }
 
 .navigation-bar { margin-bottom: 1rem; }
@@ -504,6 +565,7 @@ onMounted(fetchClients)
   cursor: pointer;
 }
 
+/* RESPONSIVE BREAKPOINTS */
 @media (max-width: 1200px) {
   .sidebar { width: 250px; }
   .main-dashboard { width: calc(100% - 250px); }
