@@ -24,6 +24,9 @@ const selectedFlag = ref('')           // Bound to the interactive Risk tiles (f
 // Columns that should have a fixed width and word wrap
 const wrappedColumns = ['flagg', 'check', 'checked for important changes']
 
+// Columns that should be rendered as status badges
+const badgeColumns = ['flagg', 'check', 'checked for important changes']
+
 /**
  * Fetch all clients from the API on component mount.
  */
@@ -270,7 +273,7 @@ onMounted(fetchClients)
                     :class="{ 'fixed-col': wrappedColumns.includes(header) }"
                   >
                     <!-- Custom rendering for columns that show badges -->
-                    <template v-if="header === 'flagg' || header === 'check' || header === 'checked for important changes'">
+                    <template v-if="badgeColumns.includes(header)">
                       <span :class="['status-badge', getBadgeClass(client[header])]">
                         {{ client[header] }}
                       </span>
