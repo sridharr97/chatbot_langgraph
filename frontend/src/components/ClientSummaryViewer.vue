@@ -29,7 +29,7 @@ defineEmits(['close'])
     <header class="summary-header">
       <div class="header-main">
         <h2 class="client-name">{{ clientName }}</h2>
-        <span class="view-tag">Full Analysis</span>
+        <span class="view-tag">Summary</span>
       </div>
     </header>
 

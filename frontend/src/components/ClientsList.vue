@@ -21,6 +21,9 @@ const nameSearch = ref('')             // Bound to the Name search input
 const selectedMonth = ref('')          // Bound to the Month dropdown
 const selectedFlag = ref('')           // Bound to the interactive Risk tiles (flagg)
 
+// Columns that should have a fixed width and word wrap
+const wrappedColumns = ['flagg', 'check', 'checked for important changes']
+
 /**
  * Fetch all clients from the API on component mount.
  */
@@ -35,15 +38,16 @@ const fetchClients = async () => {
 }
 
 /**
- * Aggregated counts for the risk tiles (VH, H, M, L).
+ * Aggregated counts for the risk tiles.
  * Uses the 'flagg' field from the data.
  */
 const flagCounts = computed(() => {
-  const counts = { 'VH': 0, 'H': 0, 'M': 0, 'L': 0 }
+  const counts = { 'Very High': 0, 'High': 0, 'Medium': 0, 'Low': 0 }
   clients.value.forEach(client => {
-    // Note: 'flag' updated to 'flagg'
-    const f = (client.flagg || '').toUpperCase()
-    if (f in counts) counts[f]++
+    const f = client.flagg
+    if (f && counts.hasOwnProperty(f)) {
+      counts[f]++
+    }
   })
   return counts
 })
@@ -64,7 +68,7 @@ const filteredClients = computed(() => {
 
     // Risk category filter (uses 'flagg' field)
     const matchesFlag = !selectedFlag.value ||
-      (client.flagg || '').toUpperCase() === selectedFlag.value.toUpperCase()
+      client.flagg === selectedFlag.value
       
     return matchesName && matchesMonth && matchesFlag
   })
@@ -98,7 +102,7 @@ const handleRowClick = async (client) => {
     window.scrollTo({ top: 0, behavior: 'smooth' })
   } catch (err) {
     console.error('Error fetching summary:', err)
-    htmlSummary.value = '<p class="error">Failed to load summary content.</p>'
+    htmlSummary.value = '<p class="error">Summary content not available.</p>'
   } finally {
     isLoadingSummary.value = false
   }
@@ -144,15 +148,17 @@ const getDisplayName = (client) => {
 }
 
 /**
- * Maps risk categories (VH, H, M, L) to CSS classes for badges and tiles.
+ * Maps risk categories to CSS classes for badges and tiles.
  */
 const getBadgeClass = (value) => {
   if (!value) return ''
   const val = String(value).toLowerCase()
-  if (val.includes('vh') || val.includes('very high')) return 'vh'
-  if (val.includes('h') || val === 'high') return 'h'
-  if (val.includes('m') || val === 'medium') return 'm'
-  if (val.includes('l') || val === 'low') return 'l'
+  if (val === 'very high' || val === 'vh') return 'vh'
+  if (val === 'high' || val === 'h') return 'h'
+  if (val === 'medium' || val === 'm') return 'm'
+  if (val === 'low' || val === 'l') return 'l'
+  if (val === 'yes') return 'yes'
+  if (val === 'no') return 'no'
   return ''
 }
 
@@ -242,7 +248,11 @@ onMounted(fetchClients)
             <table class="data-table">
               <thead>
                 <tr>
-                  <th v-for="header in tableHeaders" :key="header">
+                  <th 
+                    v-for="header in tableHeaders" 
+                    :key="header"
+                    :class="{ 'fixed-col': wrappedColumns.includes(header) }"
+                  >
                     {{ header.replace(/_/g, ' ') }}
                   </th>
                 </tr>
@@ -254,9 +264,13 @@ onMounted(fetchClients)
                   @click="handleRowClick(client)"
                   class="clickable-row"
                 >
-                  <td v-for="header in tableHeaders" :key="header">
-                    <!-- Custom rendering for the 'flagg' column to show badges -->
-                    <template v-if="header === 'flagg'">
+                  <td 
+                    v-for="header in tableHeaders" 
+                    :key="header"
+                    :class="{ 'fixed-col': wrappedColumns.includes(header) }"
+                  >
+                    <!-- Custom rendering for columns that show badges -->
+                    <template v-if="header === 'flagg' || header === 'check' || header === 'checked for important changes'">
                       <span :class="['status-badge', getBadgeClass(client[header])]">
                         {{ client[header] }}
                       </span>
@@ -444,6 +458,9 @@ onMounted(fetchClients)
   padding: 1.25rem;
   display: flex;
   flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
   gap: 0.25rem;
   cursor: pointer;
   transition: all 0.2s ease;
@@ -469,10 +486,10 @@ onMounted(fetchClients)
 }
 
 /* Risk-specific colors for tiles */
-.stat-tile.vh .tile-label { color: #991b1b; }
+.stat-tile.vh .tile-label, .stat-tile.yes .tile-label { color: #991b1b; }
 .stat-tile.h .tile-label { color: #9a3412; }
 .stat-tile.m .tile-label { color: #854d0e; }
-.stat-tile.l .tile-label { color: #166534; }
+.stat-tile.l .tile-label, .stat-tile.no .tile-label { color: #166534; }
 
 .tile-value {
   font-size: 1.75rem;
@@ -481,15 +498,15 @@ onMounted(fetchClients)
 }
 
 /* Mild Tile Background Colors based on risk level */
-.stat-tile.vh { background-color: #fef2f2; border-color: #fee2e2; }
+.stat-tile.vh, .stat-tile.yes { background-color: #fef2f2; border-color: #fee2e2; }
 .stat-tile.h { background-color: #fffaf5; border-color: #ffedd5; }
 .stat-tile.m { background-color: #fefce8; border-color: #fef9c3; }
-.stat-tile.l { background-color: #f0fdf4; border-color: #dcfce7; }
+.stat-tile.l, .stat-tile.no { background-color: #f0fdf4; border-color: #dcfce7; }
 
-.stat-tile.vh:hover { border-color: #fca5a5; }
+.stat-tile.vh:hover, .stat-tile.yes:hover { border-color: #fca5a5; }
 .stat-tile.h:hover { border-color: #fdba74; }
 .stat-tile.m:hover { border-color: #fde047; }
-.stat-tile.l:hover { border-color: #86efac; }
+.stat-tile.l:hover, .stat-tile.no:hover { border-color: #86efac; }
 
 /* DATA TABLE STYLING */
 .table-container {
@@ -505,6 +522,7 @@ onMounted(fetchClients)
   border-collapse: collapse;
   text-align: left;
   font-size: 0.95rem;
+  table-layout: auto; /* Allow columns to adjust naturally */
 }
 
 .data-table th {
@@ -514,14 +532,23 @@ onMounted(fetchClients)
   color: var(--salt-color-brown-800);
   text-transform: capitalize;
   border-bottom: 2px solid var(--salt-color-brown-200);
-  white-space: nowrap;
+  white-space: nowrap; /* Default: no wrap */
 }
 
 .data-table td {
   padding: 1rem 1.5rem;
   border-bottom: 1px solid var(--salt-color-brown-200);
   color: var(--salt-color-black);
-  white-space: nowrap;
+  white-space: nowrap; /* Default: no wrap */
+}
+
+/* Specific styling for selected columns with fixed width and wrap */
+.fixed-col {
+  width: 150px;
+  min-width: 150px;
+  white-space: normal !important;
+  word-wrap: break-word;
+  overflow-wrap: break-word;
 }
 
 .clickable-row:hover { background-color: var(--salt-color-brown-100); }
@@ -537,10 +564,10 @@ onMounted(fetchClients)
   display: inline-block;
 }
 
-.status-badge.vh { background-color: #fee2e2; color: #991b1b; }
+.status-badge.vh, .status-badge.yes { background-color: #fee2e2; color: #991b1b; }
 .status-badge.h { background-color: #ffedd5; color: #9a3412; }
 .status-badge.m { background-color: #fef9c3; color: #854d0e; }
-.status-badge.l { background-color: #f0fdf4; color: #166534; }
+.status-badge.l, .status-badge.no { background-color: #f0fdf4; color: #166534; }
 
 /* SUMMARY VIEW STYLING */
 .view-container.summary-page {
